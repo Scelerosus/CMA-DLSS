@@ -1,0 +1,5 @@
+bin/
+obj/
+release/
+native/out/
+native/ngx_sdk/

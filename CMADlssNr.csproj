@@ -4,13 +4,13 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>CMADlssNr</AssemblyName>
     <RootNamespace>CMADlssNr</RootNamespace>
-    <Version>0.8.8</Version>
+    <Version>0.8.3</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>none</DebugType>
-    <GameDir>C:\Games\Corrupted Modeling Agency 0.66</GameDir>
+    <GameDir>C:\Games\Corrupted Modeling Agency 0.67</GameDir>
   </PropertyGroup>
 
   <ItemGroup>

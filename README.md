@@ -70,6 +70,7 @@ Out of the box: DLSS at DLAA with preset M, neural rendering on, frame generatio
 
 - **Too slow?** Lower the DLSS quality (Quality or Balanced), or switch neural rendering off - it is the heaviest part.
 - **RTX 20 or 30 card?** Pick model preset **E** (or **F** at DLAA and Ultra Performance): the older, much lighter models.
+- **RTX 20 or 30 card, neural rendering?** It needs the FP16 network of the bridge mod (`version.dll` and `dlssg_to_fsr3.ini` beside the game). With it installed, the Neural page has an "FP16 network" switch; it is written to the ini and applies at the next start of the game.
 - **Glow or a halo round bright skin?** That is the game's bloom. Switch it off on the Game page.
 - **"After DLSS"** for neural rendering looks finer but costs as much as running at full resolution, whatever the DLSS quality.
 - **Controls feel delayed with frame generation?** Keep Reflex on.

@@ -604,7 +604,7 @@ public sealed class Capture : MonoBehaviour
 
 	private int m_outH;
 
-	private static readonly string[] s_qualities = new string[7] { "Performance", "Balanced", "Quality", "Ultra Performance", "Ultra Quality", "DLAA", "Custom" };
+	private static readonly string[] s_qualities = new string[6] { "Performance", "Balanced", "Quality", "Ultra Performance", "Ultra Quality", "DLAA" };
 
 	private int m_srPresetOpen = -1;
 
@@ -1126,6 +1126,54 @@ public sealed class Capture : MonoBehaviour
 		}
 	}
 
+	// F9: the frame at each stage to BepInEx\CMADlss-dump\<quality>_<render size>_<frame>_<stage>.png (game frame, DLSS
+	// output, network output, what is shown), to see at which stage something in the picture appears.
+	private bool m_dump;
+
+	private void DumpStages(Texture game, Texture dlss, Texture nr, Texture shown, int w, int h)
+	{
+		try
+		{
+			string dir = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "CMADlss-dump");
+			System.IO.Directory.CreateDirectory(dir);
+			string stem = s_qualities[Mathf.Clamp(Plugin.Quality.Value, 0, 5)].Replace(" ", "") + "_" + w + "x" + h + "_" + Time.frameCount + "_";
+			DumpStage(dir, stem + "1game", game);
+			DumpStage(dir, stem + "2dlss", dlss);
+			DumpStage(dir, stem + "3nr", nr);
+			DumpStage(dir, stem + "4shown", shown);
+			Plugin.ModLog.LogInfo((object)("Dump: stages written to " + dir + " (" + stem + "*)."));
+		}
+		catch (Exception ex)
+		{
+			Plugin.ModLog.LogWarning((object)("Dump: failed (" + ex.Message + ")."));
+		}
+	}
+
+	private static void DumpStage(string dir, string name, Texture t)
+	{
+		if ((Object)t == (Object)null)
+		{
+			return;
+		}
+		RenderTexture temporary = RenderTexture.GetTemporary(t.width, t.height, 0, (RenderTextureFormat)0, (RenderTextureReadWrite)2);
+		RenderTexture active = RenderTexture.active;
+		try
+		{
+			Graphics.Blit(t, temporary);
+			RenderTexture.active = temporary;
+			Texture2D val = new Texture2D(t.width, t.height, (TextureFormat)4, false);
+			val.ReadPixels(new Rect(0f, 0f, (float)t.width, (float)t.height), 0, 0);
+			val.Apply();
+			System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, name + ".png"), (byte[])ImageConversion.EncodeToPNG(val));
+			Object.Destroy((Object)val);
+		}
+		finally
+		{
+			RenderTexture.active = active;
+			RenderTexture.ReleaseTemporary(temporary);
+		}
+	}
+
 	private void Compose()
 	{
 		//IL_00bc: Unknown result type (might be due to invalid IL or missing references)
@@ -1161,6 +1209,10 @@ public sealed class Capture : MonoBehaviour
 		int width = ((Texture)m_target).width;
 		int height = ((Texture)m_target).height;
 		bool value = Plugin.FlipY.Value;
+		if (Input.GetKeyDown((KeyCode)290))
+		{
+			m_dump = true;
+		}
 		JitterRead(m_camera);
 		CutStep(m_camera);
 		int num = Mathf.Max(width, m_outW);
@@ -1226,6 +1278,11 @@ public sealed class Capture : MonoBehaviour
 			}
 		}
 		m_shown = Sharpened(final);
+		if (m_dump)
+		{
+			m_dump = false;
+			DumpStages((Texture)m_target, flag ? (Texture)val : (((Object)final != (Object)m_target && (Object)final != (Object)m_output) ? final : null), flag2 ? (Texture)m_output : null, m_shown, width, height);
+		}
 		m_shownFlip = shownFlip;
 		m_presentFrame = Time.frameCount;
 		FrameGenStep(m_camera, width, height);
@@ -1834,7 +1891,7 @@ public sealed class Capture : MonoBehaviour
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral("; neural rendering ");
 				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(ran ? "on" : "off");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral("; DLSS ");
-				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>((m_srOpen && !m_srFailed) ? (s_qualities[Mathf.Clamp(Plugin.Quality.Value, 0, 6)] + (m_jitOn ? ", jittered" : ", no jitter")) : "off");
+				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>((m_srOpen && !m_srFailed) ? (s_qualities[Mathf.Clamp(Plugin.Quality.Value, 0, 5)] + (m_jitOn ? ", jittered" : ", no jitter")) : "off");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral("; the plugin's own calls took ");
 				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<float>(num4, "F2");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(" ms a frame of the main thread");
@@ -2771,11 +2828,11 @@ public sealed class Capture : MonoBehaviour
 					{
 						value = 0;
 					}
-					else if (!val.HasProperty("_TransparentWritesMotionVec"))
+					else if (!val.HasProperty("_TransparentWritingMotionVec"))
 					{
 						value = 1;
 					}
-					else if (val.GetFloat("_TransparentWritesMotionVec") > 0.5f && val.IsKeywordEnabled("_TRANSPARENT_WRITES_MOTION_VEC"))
+					else if (val.GetFloat("_TransparentWritingMotionVec") > 0.5f && val.IsKeywordEnabled("_TRANSPARENT_WRITES_MOTION_VEC"))
 					{
 						value = 3;
 					}
@@ -2784,10 +2841,10 @@ public sealed class Capture : MonoBehaviour
 						m_hairMats.Add(new HairMatWas
 						{
 							material = val,
-							value = val.GetFloat("_TransparentWritesMotionVec"),
+							value = val.GetFloat("_TransparentWritingMotionVec"),
 							keyword = val.IsKeywordEnabled("_TRANSPARENT_WRITES_MOTION_VEC")
 						});
-						val.SetFloat("_TransparentWritesMotionVec", 1f);
+						val.SetFloat("_TransparentWritingMotionVec", 1f);
 						val.EnableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
 						value = 2;
 						Plugin.Info((object)("Hair: '" + ((Object)val).name + "' (" + ((Object)val.shader).name + ") is transparent; it writes motion vectors now."));
@@ -2889,7 +2946,7 @@ public sealed class Capture : MonoBehaviour
 				HairMatWas hairMatWas = m_hairMats[j];
 				if ((Object)hairMatWas.material != (Object)null)
 				{
-					hairMatWas.material.SetFloat("_TransparentWritesMotionVec", hairMatWas.value);
+					hairMatWas.material.SetFloat("_TransparentWritingMotionVec", hairMatWas.value);
 					if (!hairMatWas.keyword)
 					{
 						hairMatWas.material.DisableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
@@ -5038,11 +5095,7 @@ public sealed class Capture : MonoBehaviour
 		if (m_tab == 0)
 		{
 			Check(ref num6, num4, num5, "DLSS", Plugin.Upscale);
-			Choice(ref num6, num4, num5, "Quality", new string[7] { "DLAA", "U.Quality", "Quality", "Balanced", "Perf", "U.Perf", "Custom" }, new int[7] { 5, 4, 2, 1, 0, 3, 6 }, Plugin.Quality);
-			if (Plugin.Quality.Value == 6)
-			{
-				Slider(ref num6, num4, num5, "Render scale (share of the screen's size)", Plugin.RenderScale, 0.33f, 1f, 5);
-			}
+			Choice(ref num6, num4, num5, "Quality", new string[5] { "DLAA", "Quality", "Balanced", "Perf", "U.Perf" }, new int[5] { 5, 2, 1, 0, 3 }, Plugin.Quality);
 			if (Plugin.Preset.Value != 0 && !Chosen(Plugin.Preset.Value))
 			{
 				Plugin.Preset.Value = 0;
@@ -5052,7 +5105,7 @@ public sealed class Capture : MonoBehaviour
 			Check(ref num6, num4, num5, "Hair moves with the head (own motion vectors)", Plugin.HairOwnMotion);
 			Check(ref num6, num4, num5, "Hair's soft edges write motion too", Plugin.HairTransparentMotion);
 			Note(ref num6, num4, num5, HairMaterialsState());
-			GUI.Label(new Rect(num4, num6, num5, 162f), "DLAA keeps the full resolution and only anti-aliases; the other qualities render a smaller frame and reconstruct it, for more frames a second.\nModel preset: K is the sharpest and steadiest, M is faster; Auto takes K, and M for Performance and Ultra Performance. E and F are the older, much lighter models for RTX 20 and 30 cards: E for upscaling, F for DLAA and Ultra Performance.\nL is NVIDIA's newest model, made for Ultra Performance (NVIDIA's own pick for it); it is heavier than K and M.", m_stSmall);
+			GUI.Label(new Rect(num4, num6, num5, 162f), "DLAA keeps the full resolution and only anti-aliases; the other qualities render a smaller frame and reconstruct it, for more frames a second.\nModel preset: K is steady but keeps old history longest: the skin can go soft; M is sharper and is what Auto takes. E and F are the older, much lighter models for RTX 20 and 30 cards: E for upscaling, F for DLAA and Ultra Performance.\nL is NVIDIA's newest model, made for Ultra Performance (NVIDIA's own pick for it); it is heavier than K and M.", m_stSmall);
 			num6 += 166f;
 		}
 		else if (m_tab == 1)
@@ -5134,6 +5187,7 @@ public sealed class Capture : MonoBehaviour
 			while (val != null && num2 < val.Length)
 			{
 				Renderer val2 = val[num2];
+				TransparentMotion(val2);
 				if (!((Object)val2 == (Object)null) && Unseen(m_motionSeen, val2) && (int)val2.motionVectorGenerationMode == 2)
 				{
 					Scene scene = ((Component)val2).gameObject.scene;
@@ -5197,6 +5251,39 @@ public sealed class Capture : MonoBehaviour
 		}
 	}
 
+	// Skin, brows, the scalp cap and the like are materials of the transparent queue (2500-2999) in this game, and those
+	// write no motion vectors in HDRP: DLSS has none for them and keeps old history on them (the face went soft and
+	// streaky, most with preset K, which holds history longest). Each such material is told to write them while the
+	// plugin runs, and gives them back in MotionRestore.
+	private readonly List<Material> m_transMotion = new List<Material>();
+
+	private readonly HashSet<int> m_transSeen = new HashSet<int>();
+
+	private void TransparentMotion(Renderer r)
+	{
+		if ((Object)r == (Object)null || !Plugin.TransparentMotionVec.Value || !m_transSeen.Add(((Object)r).GetInstanceID()))
+		{
+			return;
+		}
+		try
+		{
+			Il2CppReferenceArray<Material> sharedMaterials = r.sharedMaterials;
+			for (int i = 0; sharedMaterials != null && i < sharedMaterials.Length; i++)
+			{
+				Material val = sharedMaterials[i];
+				if (!((Object)val == (Object)null) && val.renderQueue >= 2500 && val.renderQueue < 3000 && val.HasProperty("_TransparentWritingMotionVec") && !(val.GetFloat("_TransparentWritingMotionVec") > 0.5f))
+				{
+					val.SetFloat("_TransparentWritingMotionVec", 1f);
+					val.EnableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
+					m_transMotion.Add(val);
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
 	private void MotionRestore()
 	{
 		//IL_0030: Unknown result type (might be due to invalid IL or missing references)
@@ -5205,6 +5292,16 @@ public sealed class Capture : MonoBehaviour
 		//IL_007e: Expected Obj, but got Unknown
 		//IL_003e: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0044: Invalid comparison between Unknown and I4
+		foreach (Material item in m_transMotion)
+		{
+			if ((Object)item != (Object)null)
+			{
+				item.SetFloat("_TransparentWritingMotionVec", 0f);
+				item.DisableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
+			}
+		}
+		m_transMotion.Clear();
+		m_transSeen.Clear();
 		m_motionSeen.Clear();
 		if (m_noMotion.Count == 0)
 		{
@@ -5383,10 +5480,6 @@ public sealed class Capture : MonoBehaviour
 		{
 			return (uint)value;
 		}
-		if (quality != 0 && quality != 3)
-		{
-			return 11u;
-		}
 		return 13u;
 	}
 
@@ -5426,64 +5519,6 @@ public sealed class Capture : MonoBehaviour
 		maxH = m_sqMaxH;
 		sharpness = m_sqSharpness;
 		return m_sqResult;
-	}
-
-	// Custom quality: the frame's size as the slider says (a share of the screen's), whatever the presets give. DLSS's
-	// Quality mode takes 50 % to 100 % of the screen, Ultra Performance what lies below; the size is held to the range of
-	// the mode used. The slider's value counts once it has stood still for 20 frames (a change builds DLSS's feature
-	// again, which is not done on every step of a drag).
-	private float m_scaleEff = -1f;
-
-	private float m_scaleSeen = -1f;
-
-	private int m_scaleSeenAt;
-
-	private float CustomScale()
-	{
-		float num = Mathf.Clamp(Plugin.RenderScale.Value, 0.33f, 1f);
-		if (m_scaleEff < 0f)
-		{
-			m_scaleEff = num;
-			m_scaleSeen = num;
-		}
-		if (Mathf.Abs(num - m_scaleSeen) > 0.0005f)
-		{
-			m_scaleSeen = num;
-			m_scaleSeenAt = Time.frameCount;
-		}
-		else if (m_scaleSeen != m_scaleEff && Time.frameCount - m_scaleSeenAt >= 20)
-		{
-			m_scaleEff = m_scaleSeen;
-		}
-		return m_scaleEff;
-	}
-
-	private int CustomMode()
-	{
-		return (CustomScale() >= 0.5f) ? 2 : 3;
-	}
-
-	private void RenderExtentCustom(int ow, int oh, out int rw, out int rh)
-	{
-		rw = ow;
-		rh = oh;
-		float num = CustomScale();
-		if (SrQuery((uint)ow, (uint)oh, (uint)CustomMode(), out var _, out var _, out var minW, out var minH, out var maxW, out var maxH, out var _) != 0)
-		{
-			return;
-		}
-		uint num2 = (uint)Mathf.RoundToInt((float)ow * num);
-		uint num3 = (uint)Mathf.RoundToInt((float)oh * num);
-		if (maxW >= minW && maxW != 0 && maxH >= minH)
-		{
-			num2 = Math.Clamp(num2, minW, maxW);
-			num3 = Math.Clamp(num3, minH, maxH);
-		}
-		if (num2 >= 64 && num3 >= 64 && num2 <= (uint)ow && num3 <= (uint)oh)
-		{
-			rw = (int)num2;
-			rh = (int)num3;
-		}
 	}
 
 	private void RenderExtent(int ow, int oh, out int rw, out int rh)
@@ -5544,11 +5579,6 @@ public sealed class Capture : MonoBehaviour
 			}
 			if (Plugin.Quality.Value == 5)
 			{
-				return;
-			}
-			if (Plugin.Quality.Value == 6)
-			{
-				RenderExtentCustom(ow, oh, out rw, out rh);
 				return;
 			}
 			int num2 = Mathf.Clamp(Plugin.Quality.Value, 0, 4);
@@ -5661,8 +5691,8 @@ public sealed class Capture : MonoBehaviour
 		//IL_0141: Expected Obj, but got Unknown
 		//IL_02e6: Unknown result type (might be due to invalid IL or missing references)
 		//IL_02ed: Expected Obj, but got Unknown
-		int num = Mathf.Clamp(Plugin.Quality.Value, 0, 6);
-		int mode = ((num == 6) ? CustomMode() : num);
+		int num = Mathf.Clamp(Plugin.Quality.Value, 0, 5);
+		int mode = num;
 		int num2 = ((m_srOpen && m_srPresetOpen >= 0) ? m_srPresetOpen : Mathf.Max(0, Plugin.Preset.Value));
 		bool value = Plugin.AutoExposure.Value;
 		bool flag = false;

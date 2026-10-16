@@ -1,20 +1,22 @@
-# CMA DLSS NR
+# CMA DLSS NR 0.9.15
 
-NVIDIA DLSS, DLSS neural rendering and DLSS frame generation for *Corrupted Modeling Agency* 0.65.
+NVIDIA DLSS, DLSS neural rendering and DLSS frame generation for *Corrupted Modeling Agency* (tested with 0.67).
 
 ## What it does
 
-- **DLSS** - sharp anti-aliasing at full resolution (DLAA), or a smaller frame reconstructed to your screen for more frames a second (Ultra Quality, Quality, Balanced, Performance, Ultra Performance). A sharpness slider.
+- **DLSS** - sharp anti-aliasing at full resolution (DLAA), or a smaller frame reconstructed to your screen for more frames a second (Ultra Quality, Quality, Balanced, Performance, Ultra Performance). **Custom** takes the frame's size from a slider (a share of the screen's, 0.33 to 1), whatever the presets say. A sharpness slider and the model presets K, M, L, E and F.
 - **Neural rendering** - NVIDIA's network relights and refines the picture. It can run before DLSS (faster) or after it (finer).
-- **Mask** - separate neural rendering strength for the scene, skin, hair and clothing.
-- **Frame generation** - one generated frame between every two rendered ones, with NVIDIA Reflex to keep the controls responsive.
-- **Game effects** - the game's bloom, subsurface scattering, depth of field, motion blur, chromatic aberration, vignette and film grain can be switched off.
+- **Mask** - separate neural rendering strength and detail for the scene, skin, hair and clothing.
+- **Frame generation** - generated frames between the rendered ones (x2 and more where the card allows it), with NVIDIA Reflex to keep the controls responsive.
+- **Hair** - the game's strand hair gets motion vectors of its own (it moves with the head), and its soft edges write motion too, so DLSS and the network do not leave a trail behind it.
+- **Game effects** - the game's bloom, subsurface scattering, depth of field, motion blur, chromatic aberration, vignette, film grain, screen-space reflections, ambient occlusion, screen-space GI, contact shadows, volumetric fog and clouds can be switched off; the Game page also has the switches of the game's GPU fluids.
+- **Bridge** - RTX 20 and 30 cards: frame generation and the faster FP16 neural network come from the *nvidia mfg bridge* mod (see below). On RTX 40 and 50 the card runs the original FP8 network by itself.
 
 ## What you need
 
 - Windows and an NVIDIA RTX graphics card with an up-to-date driver.
-- Frame generation needs an RTX 40 or 50 card and "Hardware-accelerated GPU scheduling" switched on in the Windows graphics settings.
-- No other mod or injector that adds DLSS to the same game at the same time.
+- Frame generation needs "Hardware-accelerated GPU scheduling" switched on in the Windows graphics settings. On RTX 40 and 50 it is NVIDIA's own; on RTX 20 and 30 it comes from the bridge mod.
+- No other mod or injector that adds DLSS to the same game, except the bridge mod below.
 
 It does not work on AMD or Intel graphics cards.
 
@@ -39,6 +41,7 @@ doorstop_config.ini
 dotnet\
 BepInEx\
   core\
+  config\community.cma.dlssnr.cfg   (appears after the first start)
   plugins\
     CMADlssNr\
       CMADlssNr.dll
@@ -48,39 +51,52 @@ BepInEx\
       ngx\nvngx_dlssnr.dll
 ```
 
-**Step 3.** Start the game. The very first start after installing BepInEx takes a few minutes and needs an internet connection: BepInEx prepares itself for the game. A console window may stay open during that time. Later starts are as fast as usual.
+**Step 3 (RTX 20 and 30 only) - the bridge mod.** Copy `version.dll` and `dlssg_to_fsr3.ini` of the *nvidia mfg bridge* mod beside `Corrupted Modeling Agency.exe`. The plugin keeps its `EnableDlssNr` switch in that ini; it is asked for on RTX 20 and 30 only (on newer cards the bridge's FP16 network cannot start and is left off).
+
+**Step 4.** Start the game. The very first start after installing BepInEx takes a few minutes and needs an internet connection: BepInEx prepares itself for the game. A console window may stay open during that time. Later starts are as fast as usual.
 
 ## Use
 
-Press **Insert** in the game to open the settings window. Press it again to close it; your settings are saved.
+Press **Home** in the game to open the settings window. Press it again to close it; your settings are saved.
 
-The window has five pages:
+The window has six pages:
 
 | Page | What is there |
 |---|---|
-| DLSS | On/off, quality, sharpness, model preset |
+| DLSS | On/off, quality (with **Custom** and its Render scale slider), sharpness, model preset (Auto, K, M, L, E, F), the hair's motion vectors |
 | Neural | On/off, before or after DLSS, intensity, local tone, local structure, style, passes |
-| Mask | Separate strength for scene, skin, hair and clothing |
-| Frame Gen | Frame generation, frame pacing, Reflex |
-| Game | The game's own effects |
+| Mask | Separate strength and detail for scene, skin, hair and clothing |
+| Frame Gen | Frame generation, multiplier, frame pacing, Reflex |
+| Game | The game's own effects and the game's GPU fluids |
+| Bridge | The bridge mod's state, the FP16 network (RTX 20 and 30), what is switched on as the game starts, optimizations (including the shadow cache) |
 
-Out of the box: DLSS at DLAA with preset M, neural rendering on, frame generation off, Reflex on.
+Out of the box: DLSS at DLAA with preset M, neural rendering on (before DLSS), sharpening 0.3, frame generation off, Reflex on, shadow cache off.
+
+## Model presets
+
+- **K** - sharp and steady. **M** - faster. **Auto** takes K, and M for Performance and Ultra Performance.
+- **L** - NVIDIA's newest model, made for Ultra Performance; heavier than K and M.
+- **E** and **F** - the older, much lighter models for RTX 20 and 30 cards: E for upscaling, F for DLAA and Ultra Performance.
+
+Changing the preset closes DLSS and opens it again; with frame generation on, that one is closed and opened again too.
 
 ## Tips
 
-- **Too slow?** Lower the DLSS quality (Quality or Balanced), or switch neural rendering off - it is the heaviest part.
-- **RTX 20 or 30 card?** Pick model preset **E** (or **F** at DLAA and Ultra Performance): the older, much lighter models.
-- **RTX 20 or 30 card, neural rendering?** It needs the FP16 network of the bridge mod (`version.dll` and `dlssg_to_fsr3.ini` beside the game). With it installed, the Neural page has an "FP16 network" switch; it is written to the ini and applies at the next start of the game.
+- **Too slow?** Lower the DLSS quality (Quality or Balanced), or use **Custom** and drag the Render scale slider; or switch neural rendering off - it is the heaviest part.
+- **RTX 20 or 30 card?** Pick model preset **E** (or **F** at DLAA and Ultra Performance). For neural rendering install the bridge mod; the Bridge page then has an "FP16 network" switch, which applies at the next start of the game.
+- **A shadow stays where something has moved away?** Keep the **Shadow cache** off (the default). It is a speed-up on the Bridge page: spot and point lights remember the shadows of what has not moved; with it on, a shadow of her hair could stay in the air.
 - **Glow or a halo round bright skin?** That is the game's bloom. Switch it off on the Game page.
 - **"After DLSS"** for neural rendering looks finer but costs as much as running at full resolution, whatever the DLSS quality.
 - **Controls feel delayed with frame generation?** Keep Reflex on.
-- **Insert is taken by something else?** Change `Menu` in `BepInEx\config\community.cma.dlssnr.cfg` (the file appears after the first start).
+- **The key is taken by something else?** Change `Menu` in `BepInEx\config\community.cma.dlssnr.cfg`.
+- **The log is too quiet?** Set `VerboseLog = true` in the `[DLSS]` section for the plugin's information lines (and the neural network's NGX log).
 
 ## Uninstall
 
-Delete the folder `BepInEx\plugins\CMADlssNr`.
+Delete the folder `BepInEx\plugins\CMADlssNr` (and `version.dll` with `dlssg_to_fsr3.ini` if you installed the bridge mod).
 
 ## Credits
 
 - BepInEx 6 (bleeding edge build 785) - https://github.com/BepInEx/BepInEx, LGPL-2.1.
 - DLSS, DLSS frame generation, neural rendering and Reflex are NVIDIA's.
+- The bridge mod (frame generation and the FP16 network for RTX 20 and 30) is a separate project, built on dlssg-to-fsr3.

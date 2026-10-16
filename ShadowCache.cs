@@ -402,7 +402,7 @@ internal sealed class ShadowCache
 				if (!m_held.ContainsKey(pointer2) && !m_skipped.Contains(pointer2))
 				{
 					bool isPartOfStaticBatch = ((Renderer)val4).isPartOfStaticBatch;
-					if ((int)((Renderer)val4).shadowCastingMode == 0 || (!isPartOfStaticBatch && (Moving((Component)val4) || ((Object)val4).name.StartsWith("CMA", StringComparison.Ordinal))))
+					if ((int)((Renderer)val4).shadowCastingMode == 0 || (!isPartOfStaticBatch && (Moving((Component)val4) || ((Object)val4).name.StartsWith("CMA", StringComparison.Ordinal) || StrandHair((Renderer)val4))))
 					{
 						m_skipped.Add(pointer2);
 					}
@@ -431,6 +431,23 @@ internal sealed class ShadowCache
 			m_list.RemoveAll((Held h) => h.dead);
 			m_next = 0;
 		}
+	}
+
+	// Strand hair (the game's GPU hair, HDRP/Hair shaders) moves its strands in the shader while its transform stays still,
+	// so the cache took it for something that does not move and kept its shadow: the shadow stayed in the air when the
+	// hair swung. It is left to be drawn every frame.
+	private static bool StrandHair(Renderer r)
+	{
+		Il2CppReferenceArray<Material> sharedMaterials = r.sharedMaterials;
+		for (int i = 0; sharedMaterials != null && i < sharedMaterials.Length; i++)
+		{
+			Material val = sharedMaterials[i];
+			if ((Object)val != (Object)null && (Object)val.shader != (Object)null && ((Object)val.shader).name.StartsWith("HDRP/Hair", StringComparison.Ordinal))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static bool Moving(Component c)

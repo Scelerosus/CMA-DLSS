@@ -23,6 +23,14 @@ internal static class Native
 
 	internal static bool Loaded;
 
+	private const int FloorRva = 212344;
+
+	private const int FloorLoadRva = 18267;
+
+	private static readonly byte[] s_floorLoad = new byte[8] { 242, 15, 16, 53, 21, 246, 2, 0 };
+
+	private static double s_floorWritten = 30.0;
+
 	internal static string PluginDir => Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
 	internal static string SnippetDir => Path.Combine(PluginDir, "ngx");
@@ -31,6 +39,45 @@ internal static class Native
 
 	[DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
 	private static extern IntPtr LoadLibraryW(string path);
+
+	[DllImport("kernel32", SetLastError = true)]
+	private static extern bool VirtualProtect(IntPtr address, UIntPtr size, uint protect, out uint old);
+
+	internal static string SetPacingFloor(double hz)
+	{
+		try
+		{
+			if (s_module == IntPtr.Zero)
+			{
+				return "the native half is not loaded";
+			}
+			for (int i = 0; i < s_floorLoad.Length; i++)
+			{
+				if (Marshal.ReadByte(s_module, 18267 + i) != s_floorLoad[i])
+				{
+					return "DlssBridge.dll is of another build (the pacing code is not where it was)";
+				}
+			}
+			IntPtr intPtr = s_module + 212344;
+			double num = BitConverter.Int64BitsToDouble(Marshal.ReadInt64(intPtr));
+			if (num != 30.0 && num != s_floorWritten)
+			{
+				return "DlssBridge.dll is of another build (its pacing floor is " + num + ")";
+			}
+			if (!VirtualProtect(intPtr, (UIntPtr)8u, 4u, out var old))
+			{
+				return "the page could not be made writable (win32 error " + Marshal.GetLastWin32Error() + ")";
+			}
+			Marshal.WriteInt64(intPtr, BitConverter.DoubleToInt64Bits(hz));
+			VirtualProtect(intPtr, (UIntPtr)8u, old, out var _);
+			s_floorWritten = hz;
+			return null;
+		}
+		catch (Exception ex)
+		{
+			return ex.Message;
+		}
+	}
 
 	internal static bool Load()
 	{
@@ -53,7 +100,11 @@ internal static class Native
 			Plugin.ModLog.LogError((object)("DlssBridge.dll could not be loaded from " + text + " (win32 error " + Marshal.GetLastWin32Error() + ")."));
 			return false;
 		}
-		NativeLibrary.SetDllImportResolver(typeof(Native).Assembly, (string name, Assembly assembly, DllImportSearchPath? search) => (name == "DlssBridge") ? s_module : IntPtr.Zero);
+		NativeLibrary.SetDllImportResolver(typeof(Native).Assembly, (string name, Assembly assembly, DllImportSearchPath? search) =>
+		{
+			IntPtr result = ((!(name == "DlssBridge")) ? ((!(name == "CMAPresenter")) ? IntPtr.Zero : Presenter.Module) : s_module);
+			return result;
+		});
 		uint num = 0u;
 		try
 		{
@@ -83,6 +134,11 @@ internal static class Native
 			return false;
 		}
 		Loaded = true;
+		Presenter.Load(s_module);
+		if (!Presenter.Loaded)
+		{
+			Plugin.ModLog.LogWarning((object)("Frame generation's own presenter is not available: " + Presenter.Why + "; the bridge shows the frames itself."));
+		}
 		return true;
 	}
 
@@ -229,6 +285,21 @@ internal static class Native
 
 	[DllImport("DlssBridge")]
 	internal static extern IntPtr vdn_fg_hook_report();
+
+	[DllImport("DlssBridge")]
+	internal static extern double vdn_fg_gpu_ms();
+
+	[DllImport("DlssBridge")]
+	internal static extern double vdn_fg_hook_ms();
+
+	[DllImport("DlssBridge")]
+	internal static extern double vdn_fg_unpaced_hz();
+
+	[DllImport("DlssBridge")]
+	internal static extern uint vdn_fg_lock_missed();
+
+	[DllImport("DlssBridge")]
+	internal static extern uint vdn_fg_stale_camera();
 
 	internal static string Text(IntPtr p)
 	{

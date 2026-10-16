@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using BepInEx;
 using BepInEx.Core.Logging.Interpolation;
+using BepInEx.Logging;
 using UnityEngine;
 
 using IntPtr = System.IntPtr;
@@ -24,20 +25,19 @@ internal static class Bridge
 
 	private static bool s_loaded;
 
+	private const int CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR = 75;
+
+	private const int CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR = 76;
+
 	private const uint GET_MODULE_HANDLE_EX_FLAG_PIN = 1u;
+
+	internal static int ComputeCapability { get; private set; }
+
+	internal static bool NativeFp8 => ComputeCapability >= 89;
 
 	internal static string IniPath => Path.Combine(Paths.GameRootPath, "dlssg_to_fsr3.ini");
 
 	internal static bool Installed => File.Exists(IniPath);
-
-	// The bridge's FP16 network is rebuilt for Turing and Ampere (RTX 20 and 30). On Ada and Blackwell its GPU code
-	// does not load and neural rendering fails to start (NvAPI_D3D12_CreateCuModule failed), so it is asked for on RTX 20
-	// and 30 only. ("RTX 2000 Ada" and the like are Ada.)
-	private static readonly Regex s_oldRtx = new Regex(@"RTX\s*(20|30)\d\d|TITAN RTX", RegexOptions.IgnoreCase);
-
-	internal static string CardName => SystemInfo.graphicsDeviceName ?? "";
-
-	internal static bool OldRtx => s_oldRtx.IsMatch(CardName) && CardName.IndexOf("Ada", StringComparison.OrdinalIgnoreCase) < 0;
 
 	internal static int ModeAtStart { get; private set; } = -1;
 
@@ -73,19 +73,70 @@ internal static class Bridge
 	[DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
 	private static extern bool GetModuleHandleExW(uint flags, string name, out IntPtr module);
 
-	internal static void Start(bool fastNetwork)
+	[DllImport("nvcuda", EntryPoint = "cuInit")]
+	private static extern int CuInit(uint flags);
+
+	[DllImport("nvcuda", EntryPoint = "cuDeviceGet")]
+	private static extern int CuDeviceGet(out int device, int ordinal);
+
+	[DllImport("nvcuda", EntryPoint = "cuDeviceGetAttribute")]
+	private static extern int CuDeviceGetAttribute(out int value, int attribute, int device);
+
+	internal static bool FastNetworkWanted(bool fastNetwork)
+	{
+		if (fastNetwork)
+		{
+			return !NativeFp8;
+		}
+		return false;
+	}
+
+	private static void ReadComputeCapability()
 	{
 		try
 		{
-			if (Installed)
+			if (CuInit(0u) == 0 && CuDeviceGet(out var device, 0) == 0 && CuDeviceGetAttribute(out var value, 75, device) == 0 && CuDeviceGetAttribute(out var value2, 76, device) == 0)
 			{
-				Match match = s_key.Match(File.ReadAllText(IniPath));
-				ModeAtStart = (match.Success ? int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) : 0);
-				fastNetwork = fastNetwork && OldRtx;
-				if (ModeAtStart > 0 != fastNetwork)
+				ComputeCapability = value * 10 + value2;
+			}
+		}
+		catch (Exception ex)
+		{
+			Plugin.Info((object)("Bridge: the card's compute capability could not be read (" + ex.Message + "); FastNetwork is followed as it is."));
+		}
+	}
+
+	internal static void Start(bool fastNetwork)
+	{
+		//IL_0088: Unknown result type (might be due to invalid IL or missing references)
+		//IL_008e: Expected Obj, but got Unknown
+		try
+		{
+			if (!Installed)
+			{
+				return;
+			}
+			ReadComputeCapability();
+			Match match = s_key.Match(File.ReadAllText(IniPath));
+			ModeAtStart = (match.Success ? int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) : 0);
+			bool flag = FastNetworkWanted(fastNetwork);
+			if (ModeAtStart > 0 == flag)
+			{
+				return;
+			}
+			WriteMode(flag ? 1 : 0);
+			if (ModeAtStart > 0 && NativeFp8)
+			{
+				ManualLogSource modLog = Plugin.ModLog;
+				bool flag2 = default;
+				BepInExWarningLogInterpolatedStringHandler val = new BepInExWarningLogInterpolatedStringHandler(265, 1, out flag2);
+				if (flag2)
 				{
-					WriteMode(fastNetwork ? 1 : 0);
+					((BepInExLogInterpolatedStringHandler)val).AppendLiteral("Bridge: this card (sm_");
+					((BepInExLogInterpolatedStringHandler)val).AppendFormatted<int>(ComputeCapability);
+					((BepInExLogInterpolatedStringHandler)val).AppendLiteral(") has FP8 in hardware, and the nvidia mfg bridge's FP16 network is built for RTX 20 and 30 and does not start on it; EnableDlssNr=0 is written to dlssg_to_fsr3.ini. Neural rendering runs on NVIDIA's own network from the next start of the game.");
 				}
+				modLog.LogWarning(val);
 			}
 		}
 		catch (Exception ex)
@@ -132,7 +183,7 @@ internal static class Bridge
 					if (GetModuleHandleExW(1u, module2.FileName, out var _))
 					{
 						s_pinned.Add(module2.FileName);
-						Plugin.Info((object)("NGX: " + module2.ModuleName + " pinned in memory (closing and opening a feature again no longer unloads and reloads it)."));
+						Plugin.Info((object)("Neural rendering: " + module2.ModuleName + " pinned in memory (switching neural rendering off and on no longer reloads it)."));
 						continue;
 					}
 					Plugin.ModLog.LogWarning((object)("Neural rendering: " + module2.ModuleName + " could not be pinned (win32 error " + Marshal.GetLastWin32Error() + ")."));

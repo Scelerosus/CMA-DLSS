@@ -29,6 +29,17 @@ public sealed class Capture : MonoBehaviour
 		public Renderer renderer;
 
 		public MotionVectorGenerationMode mode;
+
+		public bool skinned;
+	}
+
+	private struct HairMatWas
+	{
+		public Material material;
+
+		public float value;
+
+		public bool keyword;
 	}
 
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -132,6 +143,10 @@ public sealed class Capture : MonoBehaviour
 	private RenderTexture m_depth;
 
 	private RenderTexture m_sliceMvec;
+
+	private RenderTexture m_fgMvec;
+
+	private RenderTexture m_fgDepth;
 
 	private RenderTexture m_sliceDepth;
 
@@ -243,6 +258,80 @@ public sealed class Capture : MonoBehaviour
 
 	private int m_fgHoldUntil;
 
+	private readonly List<string> m_cntLabel = new List<string>();
+
+	private readonly List<string> m_cntValue = new List<string>();
+
+	private readonly List<int> m_cntColour = new List<int>();
+
+	private float m_cntAt;
+
+	private int m_cntTab = -1;
+
+	private int m_cntFrames;
+
+	private ulong m_nrWaitWas;
+
+	private int m_nrWaitAt = -1;
+
+	private int m_nrFramesWas;
+
+	private double m_nrWaitMs;
+
+	private int m_fgFloorSet;
+
+	private double m_fgFloor = 30.0;
+
+	private string m_fgFloorFail = "";
+
+	private IntPtr m_cutCam;
+
+	private int m_cutFrame = -1;
+
+	private Vector3 m_cutPos;
+
+	private Quaternion m_cutRot;
+
+	private float m_cutFov;
+
+	private float m_cutMoveAvg;
+
+	private float m_cutTurnAvg;
+
+	private float m_cutZoomAvg;
+
+	private bool m_cutNow;
+
+	private int m_cuts;
+
+	private int m_cutLogs;
+
+	private string m_cutLast = "";
+
+	private uint m_reflexCap;
+
+	private bool m_reflexLow;
+
+	private double m_refreshHz;
+
+	private float m_refreshAt;
+
+	private int m_vsync = -1;
+
+	private float m_shownRate;
+
+	private uint m_presentedWas;
+
+	private double m_presentedAt = -1.0;
+
+	private bool m_presenterOn;
+
+	private bool m_presenterVisible;
+
+	private bool m_presenterFailTold;
+
+	private int m_queueWas = -1;
+
 	private readonly List<HairWas> m_hair = new List<HairWas>();
 
 	private float m_hairAt;
@@ -251,9 +340,21 @@ public sealed class Capture : MonoBehaviour
 
 	private bool m_hairMotionTold;
 
+	private MotionVectorGenerationMode m_hairWant;
+
+	private bool m_hairTransWant;
+
+	private readonly List<HairMatWas> m_hairMats = new List<HairMatWas>();
+
+	private readonly Dictionary<IntPtr, int> m_hairMatState = new Dictionary<IntPtr, int>();
+
 	private const ulong AntialiasingBit = 134217728uL;
 
 	private const ulong MotionBits = 3072uL;
+
+	private static readonly ulong s_transMotionBit = 65536uL;
+
+	private ulong m_onBits1 = 3072uL;
 
 	private const ulong SssBit = 70368744177664uL;
 
@@ -345,6 +446,10 @@ public sealed class Capture : MonoBehaviour
 
 	private static readonly Regex s_notHair = new Regex("chair|Chair|CHAIR", RegexOptions.Compiled);
 
+	private static readonly Regex s_fluidName = new Regex("semen|saliva|drool|squirt|fluid|droplet|stain|splat|lube|esperma", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+	private static readonly HashSet<string> s_fluidObjects = new HashSet<string>(StringComparer.Ordinal) { "Strand", "Strands", "Strands (landed)", "Droplets", "Droplets (film)", "Stains", "Surface" };
+
 	private static readonly string[] s_depthPasses = new string[4] { "DepthForwardOnly", "DepthOnly", "TransparentDepthPrepass", "ShadowCaster" };
 
 	private Material m_maskHairAll;
@@ -403,6 +508,8 @@ public sealed class Capture : MonoBehaviour
 
 	private float m_fpsShown;
 
+	private long m_fpsAt;
+
 	private GUIStyle m_stTitle;
 
 	private GUIStyle m_stLabel;
@@ -412,6 +519,8 @@ public sealed class Capture : MonoBehaviour
 	private GUIStyle m_stButton;
 
 	private GUIStyle m_stButtonOn;
+
+	private GUIStyle[] m_stCount;
 
 	private Texture2D m_texPanel;
 
@@ -599,6 +708,8 @@ public sealed class Capture : MonoBehaviour
 
 	private float m_sqSharpness;
 
+	private static ulong OnBits1 => 0xC00 | (Plugin.HairTransparentMotion.Value ? s_transMotionBit : 0);
+
 	private bool Active
 	{
 		get
@@ -681,15 +792,18 @@ public sealed class Capture : MonoBehaviour
 
 	private void Update()
 	{
-		//IL_003c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0048: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00eb: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0160: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_016f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0041: Unknown result type (might be due to invalid IL or missing references)
+		//IL_004d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00f0: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0165: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00fc: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0174: Unknown result type (might be due to invalid IL or missing references)
 		ReflexStep();
+		PresenterStep();
+		QueueStep();
 		PointerStep();
-		m_fpsShown = Mathf.Lerp(m_fpsShown, 1f / Mathf.Max(0.0005f, Time.unscaledDeltaTime), 0.05f);
+		CountStep();
+		Fluids.Step(Time.unscaledTime, m_menu && m_tab == 4);
 		if ((int)Plugin.MenuKey.Value != 0 && Input.GetKeyDown(Plugin.MenuKey.Value))
 		{
 			MenuToggle();
@@ -765,7 +879,7 @@ public sealed class Capture : MonoBehaviour
 			if (Active)
 			{
 				ScanStep();
-				m_shadows.Step(want: true);
+				m_shadows.Step(Plugin.UseShadowCache.Value);
 			}
 			else
 			{
@@ -1014,44 +1128,41 @@ public sealed class Capture : MonoBehaviour
 
 	private void Compose()
 	{
-		//IL_00b0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00bb: Expected Obj, but got Unknown
-		//IL_00a1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ac: Expected Obj, but got Unknown
-		//IL_017f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_018a: Expected Obj, but got Unknown
-		//IL_00df: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ea: Expected Obj, but got Unknown
-		//IL_0151: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0161: Expected Obj, but got Unknown
-		//IL_0167: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0177: Expected Obj, but got Unknown
-		//IL_01fd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0214: Expected Obj, but got Unknown
-		//IL_01dd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01f4: Expected Obj, but got Unknown
-		//IL_0240: Unknown result type (might be due to invalid IL or missing references)
-		//IL_024b: Expected Obj, but got Unknown
-		//IL_027b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0282: Expected Obj, but got Unknown
-		//IL_029a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02a1: Expected Obj, but got Unknown
-		//IL_02df: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ea: Expected Obj, but got Unknown
-		//IL_02c6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d1: Expected Obj, but got Unknown
-		//IL_02ee: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02f9: Expected Obj, but got Unknown
-		//IL_02fd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0304: Expected Obj, but got Unknown
+		//IL_00bc: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00c7: Expected Obj, but got Unknown
+		//IL_00ad: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00b8: Expected Obj, but got Unknown
+		//IL_018b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0196: Expected Obj, but got Unknown
+		//IL_00eb: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00f6: Expected Obj, but got Unknown
+		//IL_015d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_016d: Expected Obj, but got Unknown
+		//IL_0173: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0183: Expected Obj, but got Unknown
+		//IL_0209: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0220: Expected Obj, but got Unknown
+		//IL_01e9: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0200: Expected Obj, but got Unknown
+		//IL_024c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0257: Expected Obj, but got Unknown
+		//IL_0287: Unknown result type (might be due to invalid IL or missing references)
+		//IL_028e: Expected Obj, but got Unknown
+		//IL_02a6: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02ad: Expected Obj, but got Unknown
+		//IL_02eb: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02f6: Expected Obj, but got Unknown
+		//IL_02d2: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02dd: Expected Obj, but got Unknown
+		//IL_02fa: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0305: Expected Obj, but got Unknown
+		//IL_0309: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0310: Expected Obj, but got Unknown
 		int width = ((Texture)m_target).width;
 		int height = ((Texture)m_target).height;
 		bool value = Plugin.FlipY.Value;
-		if (Input.GetKeyDown((KeyCode)290))
-		{
-			m_dump = true;
-		}
 		JitterRead(m_camera);
+		CutStep(m_camera);
 		int num = Mathf.Max(width, m_outW);
 		int num2 = Mathf.Max(height, m_outH);
 		Buffers(width, height, value);
@@ -1117,60 +1228,81 @@ public sealed class Capture : MonoBehaviour
 		m_shown = Sharpened(final);
 		m_shownFlip = shownFlip;
 		m_presentFrame = Time.frameCount;
-		if (m_dump)
-		{
-			m_dump = false;
-			DumpStages((Texture)m_target, flag ? (Texture)val : (((Object)final != (Object)m_target && (Object)final != (Object)m_output) ? final : null), flag2 ? (Texture)m_output : null, m_shown, width, height);
-		}
 		FrameGenStep(m_camera, width, height);
 		Report(flag2);
 	}
 
-	// F9: the frame at each stage to BepInEx\CMADlss-dump\<quality>_<render size>_<stage>.png (game frame, DLSS output,
-	// network output, what is shown), to see where something in the picture comes from. Orientation as the textures are.
-	private bool m_dump;
-
-	private void DumpStages(Texture game, Texture dlss, Texture nr, Texture shown, int w, int h)
+	private void CutStep(Camera cam)
 	{
-		try
+		//IL_000e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0013: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0014: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0019: Unknown result type (might be due to invalid IL or missing references)
+		//IL_021e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_021f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0225: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0226: Unknown result type (might be due to invalid IL or missing references)
+		//IL_003e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0040: Unknown result type (might be due to invalid IL or missing references)
+		//IL_004c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_004e: Unknown result type (might be due to invalid IL or missing references)
+		m_cutNow = false;
+		Transform transform = ((Component)cam).transform;
+		Vector3 position = transform.position;
+		Quaternion rotation = transform.rotation;
+		float fieldOfView = cam.fieldOfView;
+		IntPtr pointer = ((Il2CppObjectBase)cam).Pointer;
+		int frameCount = Time.frameCount;
+		string text = null;
+		if (m_cutFrame >= 0)
 		{
-			string dir = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "CMADlss-dump");
-			System.IO.Directory.CreateDirectory(dir);
-			string stem = s_qualities[Mathf.Clamp(Plugin.Quality.Value, 0, 6)].Replace(" ", "") + "_" + w + "x" + h + "_" + Time.frameCount + "_";
-			DumpStage(dir, stem + "1game", game);
-			DumpStage(dir, stem + "2dlss", dlss);
-			DumpStage(dir, stem + "3nr", nr);
-			DumpStage(dir, stem + "4shown", shown);
-			Plugin.ModLog.LogInfo((object)("Dump: stages written to " + dir + " (" + stem + "*)."));
+			float num = Vector3.Distance(position, m_cutPos);
+			float num2 = Quaternion.Angle(rotation, m_cutRot);
+			float num3 = Mathf.Abs(fieldOfView - m_cutFov);
+			if (pointer != m_cutCam)
+			{
+				text = "another camera";
+			}
+			else if (frameCount - m_cutFrame > 2)
+			{
+				text = frameCount - m_cutFrame - 1 + " frames not composed";
+			}
+			else if (num > 0.25f && num > 4f * m_cutMoveAvg + 0.05f)
+			{
+				text = $"moved {num:F2} m";
+			}
+			else if (num2 > 15f && num2 > 4f * m_cutTurnAvg + 2f)
+			{
+				text = $"turned {num2:F0} deg";
+			}
+			else if (num3 > 5f && num3 > 4f * m_cutZoomAvg + 1f)
+			{
+				text = $"zoomed {num3:F0} deg";
+			}
+			if (text == null)
+			{
+				m_cutMoveAvg = Mathf.Lerp(m_cutMoveAvg, num, 0.2f);
+				m_cutTurnAvg = Mathf.Lerp(m_cutTurnAvg, num2, 0.2f);
+				m_cutZoomAvg = Mathf.Lerp(m_cutZoomAvg, num3, 0.2f);
+			}
 		}
-		catch (Exception ex)
+		m_cutCam = pointer;
+		m_cutFrame = frameCount;
+		m_cutPos = position;
+		m_cutRot = rotation;
+		m_cutFov = fieldOfView;
+		if (text != null && Plugin.FgResetOnCuts.Value)
 		{
-			Plugin.ModLog.LogWarning((object)("Dump: failed (" + ex.Message + ")."));
-		}
-	}
-
-	private static void DumpStage(string dir, string name, Texture t)
-	{
-		if ((Object)t == (Object)null)
-		{
-			return;
-		}
-		RenderTexture temporary = RenderTexture.GetTemporary(t.width, t.height, 0, (RenderTextureFormat)0, (RenderTextureReadWrite)2);
-		RenderTexture active = RenderTexture.active;
-		try
-		{
-			Graphics.Blit(t, temporary);
-			RenderTexture.active = temporary;
-			Texture2D val = new Texture2D(t.width, t.height, (TextureFormat)4, false);
-			val.ReadPixels(new Rect(0f, 0f, (float)t.width, (float)t.height), 0, 0);
-			val.Apply();
-			System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, name + ".png"), (byte[])ImageConversion.EncodeToPNG(val));
-			Object.Destroy((Object)val);
-		}
-		finally
-		{
-			RenderTexture.active = active;
-			RenderTexture.ReleaseTemporary(temporary);
+			m_cutNow = true;
+			m_cuts++;
+			m_cutLast = text;
+			m_reset = Math.Max(m_reset, 1);
+			m_srReset = Math.Max(m_srReset, 1);
+			if (m_cutLogs < 20)
+			{
+				m_cutLogs++;
+				Plugin.Info((object)("Camera cut (" + text + "): frame generation, DLSS and neural rendering start afresh."));
+			}
 		}
 	}
 
@@ -1764,6 +1896,8 @@ public sealed class Capture : MonoBehaviour
 			Drop(ref m_mvec);
 			Drop(ref m_depth);
 			Drop(ref m_sliceMvec);
+			Drop(ref m_fgMvec);
+			Drop(ref m_fgDepth);
 			Drop(ref m_mvecBig);
 			Drop(ref m_depthBig);
 			Drop(ref m_sliceDepth);
@@ -1821,8 +1955,8 @@ public sealed class Capture : MonoBehaviour
 	}
 
 	// Frame generation closed altogether (not only switched off) while DLSS is closed and opened again for another preset:
-	// with it open, that swap crashed the game every time (access violation, in the driver's NGX or at an address that
-	// belongs to no module); with it off, the same swaps ran clean. It opens again by itself when the hold ends.
+	// with it open that swap crashed the game (access violation in the driver's NGX or at an address that belongs to no
+	// module); with it off, the same swaps ran clean. It opens again by itself when the hold ends.
 	private void FrameGenClose()
 	{
 		if (!m_fgOpened)
@@ -1861,6 +1995,35 @@ public sealed class Capture : MonoBehaviour
 		m_fgHavePrev = false;
 	}
 
+	private RenderTexture FgFull(ref RenderTexture rt, RenderTexture from, string name)
+	{
+		//IL_0002: Unknown result type (might be due to invalid IL or missing references)
+		//IL_000d: Expected Obj, but got Unknown
+		//IL_0051: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0056: Unknown result type (might be due to invalid IL or missing references)
+		//IL_005b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0062: Unknown result type (might be due to invalid IL or missing references)
+		//IL_006a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0072: Expected Obj, but got Unknown
+		//IL_007b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0087: Expected Obj, but got Unknown
+		//IL_002f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0035: Unknown result type (might be due to invalid IL or missing references)
+		if ((Object)rt == (Object)null || ((Texture)rt).width != m_outW || ((Texture)rt).height != m_outH || rt.graphicsFormat != from.graphicsFormat)
+		{
+			Drop(ref rt);
+			rt = new RenderTexture(m_outW, m_outH, 0, from.graphicsFormat)
+			{
+				name = name,
+				hideFlags = (HideFlags)61,
+				filterMode = (FilterMode)0
+			};
+			rt.Create();
+		}
+		Graphics.Blit((Texture)from, rt);
+		return rt;
+	}
+
 	private void FrameGenStep(Camera cam, int w, int h)
 	{
 		//IL_0197: Unknown result type (might be due to invalid IL or missing references)
@@ -1873,50 +2036,52 @@ public sealed class Capture : MonoBehaviour
 		//IL_0092: Expected Obj, but got Unknown
 		//IL_01b8: Unknown result type (might be due to invalid IL or missing references)
 		//IL_01c3: Expected Obj, but got Unknown
-		//IL_021d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0227: Expected Obj, but got Unknown
-		//IL_022e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0238: Expected Obj, but got Unknown
-		//IL_026c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0272: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0277: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0278: Unknown result type (might be due to invalid IL or missing references)
-		//IL_027a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_027f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0284: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0293: Unknown result type (might be due to invalid IL or missing references)
-		//IL_028e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_029a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_029f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02a4: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ac: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ba: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ca: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ea: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ef: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02f2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02f7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02fa: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ff: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0301: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0306: Unknown result type (might be due to invalid IL or missing references)
-		//IL_030f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_031e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_032d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_033c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_034b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_035a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0369: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0378: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0387: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0397: Unknown result type (might be due to invalid IL or missing references)
+		//IL_024f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_025a: Expected Obj, but got Unknown
+		//IL_02cb: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02d5: Expected Obj, but got Unknown
+		//IL_02d7: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02e1: Expected Obj, but got Unknown
+		//IL_0319: Unknown result type (might be due to invalid IL or missing references)
+		//IL_031f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0324: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0326: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0329: Unknown result type (might be due to invalid IL or missing references)
+		//IL_032e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0333: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0342: Unknown result type (might be due to invalid IL or missing references)
+		//IL_033d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0349: Unknown result type (might be due to invalid IL or missing references)
+		//IL_034e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0353: Unknown result type (might be due to invalid IL or missing references)
+		//IL_035b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_036a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_037a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0389: Unknown result type (might be due to invalid IL or missing references)
+		//IL_039a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_039f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03a2: Unknown result type (might be due to invalid IL or missing references)
 		//IL_03a7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_03b7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_04e8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_04ea: Unknown result type (might be due to invalid IL or missing references)
-		//IL_056f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0576: Expected Obj, but got Unknown
+		//IL_03aa: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03af: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03b1: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03b6: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03bf: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03ce: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03dd: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03ec: Unknown result type (might be due to invalid IL or missing references)
+		//IL_03fb: Unknown result type (might be due to invalid IL or missing references)
+		//IL_040a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0419: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0428: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0437: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0447: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0457: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0467: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0670: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0672: Unknown result type (might be due to invalid IL or missing references)
+		//IL_06f7: Unknown result type (might be due to invalid IL or missing references)
+		//IL_06fe: Expected Obj, but got Unknown
 		if (!Plugin.FrameGen.Value || m_fgFailed || Time.frameCount < m_fgHoldUntil)
 		{
 			FrameGenStop();
@@ -1968,6 +2133,20 @@ public sealed class Capture : MonoBehaviour
 				m_fgStatus = "waiting for motion vectors and depth";
 				return;
 			}
+			RenderTexture val3 = m_sliceMvec;
+			RenderTexture val4 = m_sliceDepth;
+			if ((m_outW != w || m_outH != h) && m_outW >= w && m_outH >= h)
+			{
+				val3 = FgFull(ref m_fgMvec, m_sliceMvec, "CMADlssNr.FgMotion");
+				val4 = FgFull(ref m_fgDepth, m_sliceDepth, "CMADlssNr.FgDepth");
+				w = m_outW;
+				h = m_outH;
+			}
+			else if ((Object)m_fgMvec != (Object)null)
+			{
+				Drop(ref m_fgMvec);
+				Drop(ref m_fgDepth);
+			}
 			if (w != m_fgW || h != m_fgH)
 			{
 				m_fgW = w;
@@ -1976,8 +2155,13 @@ public sealed class Capture : MonoBehaviour
 				m_fgRegMv = (m_fgRegDepth = IntPtr.Zero);
 				Native.vdn_fg_reset();
 			}
-			IntPtr intPtr = Ptr((Texture)m_sliceMvec);
-			IntPtr intPtr2 = Ptr((Texture)m_sliceDepth);
+			else if (m_cutNow)
+			{
+				m_fgHavePrev = false;
+				Native.vdn_fg_reset();
+			}
+			IntPtr intPtr = Ptr((Texture)val3);
+			IntPtr intPtr2 = Ptr((Texture)val4);
 			if (intPtr != m_fgRegMv || intPtr2 != m_fgRegDepth)
 			{
 				Native.vdn_fg_set_textures(intPtr, intPtr2);
@@ -1985,8 +2169,8 @@ public sealed class Capture : MonoBehaviour
 				m_fgRegDepth = intPtr2;
 			}
 			Matrix4x4 gPUProjectionMatrix = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true);
-			Matrix4x4 val3 = gPUProjectionMatrix * cam.worldToCameraMatrix;
-			Matrix4x4 m = (m_fgHavePrev ? m_fgPrevVP : val3) * val3.inverse;
+			Matrix4x4 val5 = gPUProjectionMatrix * cam.worldToCameraMatrix;
+			Matrix4x4 m = (m_fgHavePrev ? m_fgPrevVP : val5) * val5.inverse;
 			Fill(m_fgViewToClip, gPUProjectionMatrix);
 			Fill(m_fgClipToView, gPUProjectionMatrix.inverse);
 			Fill(m_fgClipToPrev, m);
@@ -2008,8 +2192,9 @@ public sealed class Capture : MonoBehaviour
 			m_fgBasis[9] = forward.x;
 			m_fgBasis[10] = forward.y;
 			m_fgBasis[11] = forward.z;
-			float mvScaleX = (float)w * (Plugin.FgInvertMotionX.Value ? (-1f) : 1f);
-			float mvScaleY = (float)h * (Plugin.FgInvertMotionY.Value ? (-1f) : 1f);
+			bool flag2 = Plugin.FgMotionUnits.Value == 1;
+			float mvScaleX = (flag2 ? ((float)w) : 1f) * (Plugin.FgInvertMotionX.Value ? (-1f) : 1f);
+			float mvScaleY = (flag2 ? ((float)h) : 1f) * (Plugin.FgInvertMotionY.Value ? (-1f) : 1f);
 			Native.vdn_fg_set_frame(m_fgViewToClip, m_fgClipToView, m_fgClipToPrev, m_fgPrevToClip, m_fgBasis, cam.nearClipPlane, cam.farClipPlane, cam.fieldOfView * (MathF.PI / 180f), cam.aspect, mvScaleX, mvScaleY, m_jitterX, 0f - m_jitterY, Plugin.DepthInverted.Value ? 1 : 0, 1);
 			float unscaledTime = Time.unscaledTime;
 			if (unscaledTime >= m_fgMostAt)
@@ -2019,12 +2204,32 @@ public sealed class Capture : MonoBehaviour
 				m_fgBase = (float)Native.vdn_fg_base_hz();
 			}
 			m_fgTotal = Mathf.Clamp(Plugin.FgMultiplier.Value, 2, m_fgMost);
-			Native.vdn_fg_set_pacing(Plugin.FgPacing.Value ? 1 : 0);
+			int num2 = Mathf.Clamp(Plugin.FgPacingFloor.Value, 1, 60);
+			if (num2 != m_fgFloorSet)
+			{
+				m_fgFloorSet = num2;
+				string text = Native.SetPacingFloor(num2);
+				if (text == null)
+				{
+					m_fgFloor = num2;
+					m_fgFloorFail = "";
+				}
+				else
+				{
+					m_fgFloor = 30.0;
+					if (m_fgFloorFail.Length == 0)
+					{
+						Plugin.ModLog.LogWarning((object)("Frame generation: the pacing floor could not be set to " + num2 + " (" + text + "); the bridge's own 30 stays."));
+					}
+					m_fgFloorFail = text;
+				}
+			}
+			Native.vdn_fg_set_pacing((Plugin.FgPacing.Value && !m_presenterOn) ? 1 : 0);
 			Native.vdn_fg_set_menu_detection(0);
 			Native.vdn_fg_set_multiplier(m_fgTotal);
 			Native.vdn_fg_enable(1);
 			m_fgEnabled = true;
-			m_fgPrevVP = val3;
+			m_fgPrevVP = val5;
 			m_fgHavePrev = true;
 			m_fgOn = Native.vdn_fg_generating() != 0;
 			float unscaledTime2 = Time.unscaledTime;
@@ -2037,30 +2242,30 @@ public sealed class Capture : MonoBehaviour
 			{
 				m_fgLogs++;
 				_ = Plugin.ModLog;
-				BepInExInfoLogInterpolatedStringHandler val4 = new BepInExInfoLogInterpolatedStringHandler(117, 9, out flag);
+				BepInExInfoLogInterpolatedStringHandler val6 = new BepInExInfoLogInterpolatedStringHandler(117, 9, out flag);
 				if (flag)
 				{
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral("Frame generation: ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<string>(m_fgOn ? "generating" : "NOT generating");
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral(", x");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<int>(m_fgTotal);
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral("; ready ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<int>(Native.vdn_fg_ready());
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral("; shown ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<uint>(Native.vdn_fg_presented());
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral(" frame(s), of them made ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<uint>(Native.vdn_fg_interpolated());
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral(", passed through ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<uint>(Native.vdn_fg_passed_through());
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral("; rendered at ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<double>(Native.vdn_fg_base_hz(), "F0");
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral(" a second; ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<string>(Native.Text(Native.vdn_fg_status_text()));
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral("; held back: ");
-					((BepInExLogInterpolatedStringHandler)val4).AppendFormatted<string>(Native.Text(Native.vdn_fg_gate_summary()));
-					((BepInExLogInterpolatedStringHandler)val4).AppendLiteral(".");
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral("Frame generation: ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<string>(m_fgOn ? "generating" : "NOT generating");
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral(", x");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<int>(m_fgTotal);
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral("; ready ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<int>(Native.vdn_fg_ready());
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral("; shown ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<uint>(Native.vdn_fg_presented());
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral(" frame(s), of them made ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<uint>(Native.vdn_fg_interpolated());
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral(", passed through ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<uint>(Native.vdn_fg_passed_through());
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral("; rendered at ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<double>(Native.vdn_fg_base_hz(), "F0");
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral(" a second; ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<string>(Native.Text(Native.vdn_fg_status_text()));
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral("; held back: ");
+					((BepInExLogInterpolatedStringHandler)val6).AppendFormatted<string>(Native.Text(Native.vdn_fg_gate_summary()));
+					((BepInExLogInterpolatedStringHandler)val6).AppendLiteral(".");
 				}
-				Plugin.Info(val4);
+				Plugin.Info(val6);
 			}
 			m_fgLogAt = unscaledTime2 + ((m_fgLogs < 4) ? 2f : 10f);
 		}
@@ -2075,14 +2280,14 @@ public sealed class Capture : MonoBehaviour
 
 	private void MenuBridge(ref float y, float x, float w)
 	{
-		//IL_00c6: Unknown result type (might be due to invalid IL or missing references)
 		//IL_013e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01b6: Unknown result type (might be due to invalid IL or missing references)
 		string text;
 		if (Bridge.Installed)
 		{
 			if (Bridge.ModeAtStart <= 0)
 			{
-				text = "nvidia mfg bridge: its FP16 network is off this session.";
+				text = (Bridge.NativeFp8 ? "nvidia mfg bridge: neural rendering runs on NVIDIA's own FP8 network." : "nvidia mfg bridge: its FP16 network is off this session.");
 			}
 			else
 			{
@@ -2094,9 +2299,9 @@ public sealed class Capture : MonoBehaviour
 			text = "The nvidia mfg bridge mod is not beside the game (version.dll and dlssg_to_fsr3.ini).";
 		}
 		Note(ref y, x, w, text);
-		if (!Bridge.OldRtx)
+		if (Bridge.NativeFp8)
 		{
-			Note(ref y, x, w, "This video card (" + Bridge.CardName + ") runs the original FP8 network: the FP16 one is for RTX 20 and 30.");
+			Note(ref y, x, w, $"This card (sm_{Bridge.ComputeCapability}) runs NVIDIA's FP8 network in hardware. The bridge's FP16 network is built for RTX 20 and 30 and does not start on it, so it is not used here" + ((Bridge.Installed && Bridge.ModeAtStart > 0) ? "; the bridge still hands it over this session, so neural rendering runs from the next start of the game." : "."));
 		}
 		else
 		{
@@ -2111,7 +2316,7 @@ public sealed class Capture : MonoBehaviour
 				Note(ref y, x, w, "Takes effect after the game is restarted: the mod reads its file at startup.");
 			}
 		}
-		Note(ref y, x, w, "The same picture, about 21 → 30 frames a second on an RTX 3060. Frame generation on RTX 20 and 30 (Frame Gen tab) also comes from this mod; its own neural rendering cannot run here (D3D12 only, and this game is D3D11).");
+		Note(ref y, x, w, "The same picture, about 21 → 30 frames a second on an RTX 3060 (RTX 20 and 30 only). Frame generation on RTX 20 and 30 (Frame Gen tab) also comes from this mod; its own neural rendering cannot run here (D3D12 only, and this game is D3D11).");
 		Line(ref y, x, w);
 		Fit(new Rect(x, y, w, 24f), "Switch on as the game starts", m_stLabel);
 		y += 28f;
@@ -2122,6 +2327,8 @@ public sealed class Capture : MonoBehaviour
 		Line(ref y, x, w);
 		Fit(new Rect(x, y, w, 24f), "Optimization", m_stLabel);
 		y += 28f;
+		Check(ref y, x, w, "Shadow cache (faster, can leave stale shadows)", Plugin.UseShadowCache);
+		Note(ref y, x, w, "Lights remember the shadows of objects that have not moved for a while and redraw only what moves: less GPU work, but a shadow can stay where something has moved away (seen with her hair). Off: every shadow is drawn every frame, as in the game.");
 		Check(ref y, x, w, "Check each object once (fewer stutters)", Plugin.FastScans);
 		Check(ref y, x, w, "Sharpening in 3 passes instead of 4", Plugin.FastSharpening);
 		Check(ref y, x, w, "Mask drawn at half size when Soft is on", Plugin.HalfResMask);
@@ -2151,7 +2358,6 @@ public sealed class Capture : MonoBehaviour
 
 	private void MenuFrameGen(ref float y, float x, float w)
 	{
-		//IL_012b: Unknown result type (might be due to invalid IL or missing references)
 		Check(ref y, x, w, "Frame generation (DLSS-G)", Plugin.FrameGen);
 		Check(ref y, x, w, "Even frame pacing", Plugin.FgPacing);
 		int num = Mathf.Max(Mathf.Max(m_fgMost, 2), Mathf.Clamp(Plugin.FgMultiplier.Value, 2, 6));
@@ -2163,11 +2369,220 @@ public sealed class Capture : MonoBehaviour
 			array2[i - 2] = i;
 		}
 		Choice(ref y, x, w, "Frames for each rendered one" + ((m_fgMost > 2) ? $" (up to x{m_fgMost} here)" : ""), array, array2, Plugin.FgMultiplier);
+		Check(ref y, x, w, "Own presenter without VSync (off: the bridge)" + (Presenter.Loaded ? "" : "  [not available]"), Plugin.FgOwnPresenter);
+		Check(ref y, x, w, "Start afresh on camera cuts", Plugin.FgResetOnCuts);
+		Check(ref y, x, w, "Even rendered frames (Reflex cap, with VSync on)", Plugin.FgFrameCap);
+		if (!m_presenterOn)
+		{
+			Choice(ref y, x, w, "Bridge's spacing down to (rendered a second)", new string[4] { "30 (bridge's)", "20", "15", "10" }, new int[4] { 30, 20, 15, 10 }, Plugin.FgPacingFloor);
+		}
 		Line(ref y, x, w);
 		Check(ref y, x, w, "NVIDIA Reflex low latency  (" + ReflexState + ")", Plugin.Reflex);
 		Check(ref y, x, w, "Reflex boost", Plugin.ReflexBoost);
-		GUI.Label(new Rect(x, y, w, 200f), "x2 shows one made frame between rendered ones, x3 two, x4 three. A 60 Hz monitor shows at most 60 frames a second: there more than x2 only means fewer rendered frames and more delay; it is for 120 Hz and faster monitors. Needs DLSS or neural rendering on and hardware-accelerated GPU scheduling; RTX 20 and 30 cards get it from the bridge mod (version.dll).\nReflex cuts the delay between the mouse and the screen.\n" + (Plugin.FrameGen.Value ? ("Now: " + ((m_fgStatus.Length > 0) ? m_fgStatus : "starting")) : ""), m_stSmall);
-		y += 204f;
+		Check(ref y, x, w, "One frame queued, without VSync (less mouse delay)" + ((m_queueWas >= 0) ? $"  (game's: {m_queueWas})" : ""), Plugin.ShortQueue);
+		Line(ref y, x, w);
+		Counters(ref y, x, w, 3);
+	}
+
+	private void Counters(ref float y, float x, float w, int tab)
+	{
+		//IL_0071: Unknown result type (might be due to invalid IL or missing references)
+		//IL_009d: Unknown result type (might be due to invalid IL or missing references)
+		if (Time.unscaledTime >= m_cntAt || m_cntTab != tab)
+		{
+			m_cntAt = Time.unscaledTime + 0.5f;
+			m_cntTab = tab;
+			if (tab == 1)
+			{
+				NeuralCounters();
+			}
+			else
+			{
+				FrameGenCounters();
+			}
+		}
+		for (int i = 0; i < m_cntLabel.Count; i++)
+		{
+			GUIStyle val = m_stCount[m_cntColour[i] % m_stCount.Length];
+			GUI.Label(new Rect(x, y, 200f, 20f), m_cntLabel[i], val);
+			GUI.Label(new Rect(x + 200f, y, w - 200f, 20f), m_cntValue[i], val);
+			y += 20f;
+		}
+	}
+
+	[HideFromIl2Cpp]
+	private void Count(string label, string value, int colour)
+	{
+		m_cntLabel.Add(label);
+		m_cntValue.Add(value);
+		m_cntColour.Add(colour);
+	}
+
+	private void NeuralCounters()
+	{
+		m_cntLabel.Clear();
+		m_cntValue.Clear();
+		m_cntColour.Clear();
+		bool flag = Plugin.Enabled.Value && !m_nrFailed && m_view >= 0 && m_initialised;
+		Capture capture = this;
+		string value;
+		if (Plugin.Enabled.Value)
+		{
+			if (m_nrFailed)
+			{
+				value = "failed";
+			}
+			else
+			{
+				value = (flag ? $"on, {m_width}x{m_height}" : "starting");
+			}
+		}
+		else
+		{
+			value = "off";
+		}
+		capture.Count("Neural rendering", value, 0);
+		Count("Rendered", (m_fpsShown > 0f) ? $"{m_fpsShown:F0} fps, {1000f / m_fpsShown:F1} ms a frame" : "-", 1);
+		int num = GpuStats.Load();
+		Count("Video card load", (num >= 0) ? $"{num}%" : ("not known (" + GpuStats.NvWhy + ")"), 9);
+		if (GpuStats.Read(0, out var usage, out var budget))
+		{
+			Count("Video memory used", $"{(double)usage / 1073741824.0:F2} of {(double)budget / 1073741824.0:F2} GB" + ((GpuStats.Dedicated != 0) ? $" (card {(double)GpuStats.Dedicated / 1073741824.0:F0} GB)" : ""), 2);
+			Count("Video memory left", $"{((double)budget - (double)usage) / 1073741824.0:F2} GB", 3);
+			if (GpuStats.Read(1, out var usage2, out var _))
+			{
+				Count("In system memory", $"{(double)usage2 / 1073741824.0:F2} GB", 4);
+			}
+		}
+		else
+		{
+			Count("Video memory", "not known (" + GpuStats.Why + ")", 2);
+		}
+		if (!flag)
+		{
+			return;
+		}
+		try
+		{
+			ulong num2 = Native.vdn_ring_wait_micros(m_view);
+			int num3 = m_cntFrames - m_nrFramesWas;
+			if (m_nrWaitAt == m_view && num3 > 0 && num2 >= m_nrWaitWas)
+			{
+				m_nrWaitMs = (double)(num2 - m_nrWaitWas) / 1000.0 / (double)num3;
+			}
+			m_nrWaitAt = m_view;
+			m_nrWaitWas = num2;
+			m_nrFramesWas = m_cntFrames;
+			Count("Waited for the GPU", $"{m_nrWaitMs:F2} ms a frame", 5);
+			Count("Worst wait", $"{(double)Native.vdn_ring_wait_worst_micros(m_view) / 1000.0:F1} ms", 6);
+			Count("Waits / timed out", $"{Native.vdn_ring_waits(m_view)} / {Native.vdn_ring_timeouts(m_view)}", 7);
+			Count("Frames run / skipped", $"{Native.vdn_frames_evaluated(m_view)} / {Native.vdn_frames_skipped(m_view)}", 8);
+		}
+		catch (Exception)
+		{
+			Count("Counters", "cannot be read", 3);
+		}
+	}
+
+	private void FrameGenCounters()
+	{
+		m_cntLabel.Clear();
+		m_cntValue.Clear();
+		m_cntColour.Clear();
+		string value;
+		if (Plugin.FrameGen.Value)
+		{
+			if (m_fgFailed)
+			{
+				value = "failed";
+			}
+			else if (m_fgOpened)
+			{
+				value = (m_fgOn ? "generating" : "not generating");
+			}
+			else
+			{
+				value = "starting";
+			}
+		}
+		else
+		{
+			value = "off";
+		}
+		Count("Frame generation", value, 0);
+		Count("Rendered", $"{m_fpsShown:F0} fps", 1);
+		if (!Plugin.FrameGen.Value || !m_fgOpened || m_fgFailed)
+		{
+			return;
+		}
+		try
+		{
+			double num = RefreshHz();
+			Count("Shown", (m_shownRate > 0f) ? $"{m_shownRate:F0} fps" : "-", 2);
+			Count("Multiplier", "x" + m_fgTotal, 3);
+			Count("Monitor", (num > 0.0) ? $"{num:F2} Hz" : "-", 4);
+			Capture capture = this;
+			string value2;
+			if (m_vsync > 0)
+			{
+				value2 = "on";
+			}
+			else
+			{
+				value2 = ((m_vsync == 0) ? "off" : "-");
+			}
+			capture.Count("Game's VSync", value2, 5);
+			Capture capture2 = this;
+			string value3;
+			if (m_presenterVisible)
+			{
+				value3 = "own presenter";
+			}
+			else
+			{
+				value3 = ((Presenter.Loaded && Presenter.cp_failed() != 0) ? "bridge (own presenter failed)" : "bridge");
+			}
+			capture2.Count("Shown by", value3, 6);
+			string value4;
+			if (m_presenterVisible)
+			{
+				value4 = (Plugin.FgPacing.Value ? $"{Presenter.cp_spacing_ms():F1} ms apart" : "off");
+			}
+			else
+			{
+				double num2 = Native.vdn_fg_unpaced_hz();
+				string? text;
+				if (Plugin.FgPacing.Value)
+				{
+					text = ((num2 > 0.0 && num2 < m_fgFloor) ? $"off (below {m_fgFloor:F0}/s)" : $"on (from {m_fgFloor:F0}/s)");
+				}
+				else
+				{
+					text = "off";
+				}
+				value4 = text + ((m_fgFloorFail.Length > 0) ? ", floor not set" : "");
+			}
+			Count("Pacing", value4, 7);
+			Count("Bridge: rendered", $"{Native.vdn_fg_base_hz():F1} /s", 8);
+			Count("Bridge: before pacing", $"{Native.vdn_fg_unpaced_hz():F1} /s", 9);
+			Count("Made frame, GPU", $"{Native.vdn_fg_gpu_ms():F2} ms", 10);
+			Count("Present hook, CPU", $"{Native.vdn_fg_hook_ms():F2} ms", 11);
+			if (m_presenterVisible)
+			{
+				Count("Presenter: delay", $"{Presenter.cp_delay_ms():F1} ms", 0);
+				Count("Presenter: GPU wait", $"{Presenter.cp_gpu_ms():F1} ms", 1);
+				Count("Presenter: Present", $"{Presenter.cp_present_ms():F1} ms", 2);
+				Count("Presenter: let go", Presenter.cp_dropped().ToString(), 3);
+			}
+			Count("Camera cuts", m_cuts.ToString(), 4);
+			Count("Stale camera", Native.vdn_fg_stale_camera().ToString(), 5);
+			Count("Without generation", Native.vdn_fg_lock_missed().ToString(), 6);
+			Count("Frames queued", QualitySettings.maxQueuedFrames.ToString(), 7);
+		}
+		catch (Exception)
+		{
+			Count("Counters", "cannot be read", 3);
+		}
 	}
 
 	[HideFromIl2Cpp]
@@ -2231,25 +2646,45 @@ public sealed class Capture : MonoBehaviour
 
 	private void HairStep(bool on)
 	{
-		//IL_005c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0067: Expected Obj, but got Unknown
-		//IL_009b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00a6: Expected Obj, but got Unknown
-		//IL_00c0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0124: Unknown result type (might be due to invalid IL or missing references)
-		//IL_012b: Expected Obj, but got Unknown
+		//IL_0017: Unknown result type (might be due to invalid IL or missing references)
+		//IL_003f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0040: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0026: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0028: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0098: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00a3: Expected Obj, but got Unknown
+		//IL_00e0: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00eb: Expected Obj, but got Unknown
+		//IL_0118: Unknown result type (might be due to invalid IL or missing references)
+		//IL_011a: Invalid comparison between Unknown and I4
+		//IL_012a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0135: Expected Obj, but got Unknown
+		//IL_0148: Unknown result type (might be due to invalid IL or missing references)
+		//IL_014d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0172: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0177: Unknown result type (might be due to invalid IL or missing references)
+		//IL_018e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01ba: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01c1: Expected Obj, but got Unknown
+		//IL_01e1: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01e3: Invalid comparison between Unknown and I4
 		if (m_hairFailed)
 		{
 			return;
 		}
 		try
 		{
-			if (!on)
+			MotionVectorGenerationMode val = (MotionVectorGenerationMode)(Plugin.HairOwnMotion.Value ? 1 : 0);
+			bool value = Plugin.HairTransparentMotion.Value;
+			if (!on || val != m_hairWant || value != m_hairTransWant)
 			{
 				HairRestore();
-				return;
+				m_hairWant = val;
+				m_hairTransWant = value;
+				if (!on)
+				{
+					return;
+				}
 			}
 			float unscaledTime = Time.unscaledTime;
 			if (unscaledTime < m_hairAt)
@@ -2264,35 +2699,48 @@ public sealed class Capture : MonoBehaviour
 					m_hair.RemoveAt(num);
 				}
 			}
-			Il2CppArrayBase<Renderer> val = Object.FindObjectsOfType<Renderer>();
+			Il2CppArrayBase<Renderer> val2 = Object.FindObjectsOfType<Renderer>();
 			int num2 = 0;
 			bool flag = false;
-			while (val != null && num2 < val.Length)
+			while (val2 != null && num2 < val2.Length)
 			{
-				Renderer val2 = val[num2];
-				if (!((Object)val2 == (Object)null) && Unseen(m_hairSeen, val2) && (int)val2.motionVectorGenerationMode != 0 && StrandHair(val2))
-				{
-					m_hair.Add(new HairWas
-					{
-						renderer = val2,
-						mode = val2.motionVectorGenerationMode
-					});
-					val2.motionVectorGenerationMode = (MotionVectorGenerationMode)0;
-					if (!m_hairMotionTold)
-					{
-						m_hairMotionTold = true;
-						_ = Plugin.ModLog;
-						BepInExInfoLogInterpolatedStringHandler val3 = new BepInExInfoLogInterpolatedStringHandler(83, 1, out flag);
-						if (flag)
-						{
-							((BepInExLogInterpolatedStringHandler)val3).AppendLiteral("Hair: '");
-							((BepInExLogInterpolatedStringHandler)val3).AppendFormatted<string>(((Object)val2).name);
-							((BepInExLogInterpolatedStringHandler)val3).AppendLiteral("' is strand hair: it gets the camera's motion vectors while the plugin runs.");
-						}
-						Plugin.Info(val3);
-					}
-				}
+				Renderer val3 = val2[num2];
 				num2++;
+				if ((Object)val3 == (Object)null || !Unseen(m_hairSeen, val3) || !StrandHair(val3))
+				{
+					continue;
+				}
+				HairMaterials(val3, value);
+				SkinnedMeshRenderer val4 = (((int)val == 1) ? ((Il2CppObjectBase)val3).TryCast<SkinnedMeshRenderer>() : null);
+				bool flag2 = (Object)val4 != (Object)null && !val4.skinnedMotionVectors;
+				if (val3.motionVectorGenerationMode == val && !flag2)
+				{
+					continue;
+				}
+				m_hair.Add(new HairWas
+				{
+					renderer = val3,
+					mode = val3.motionVectorGenerationMode,
+					skinned = flag2
+				});
+				val3.motionVectorGenerationMode = val;
+				if (flag2)
+				{
+					val4.skinnedMotionVectors = true;
+				}
+				if (!m_hairMotionTold)
+				{
+					m_hairMotionTold = true;
+					_ = Plugin.ModLog;
+					BepInExInfoLogInterpolatedStringHandler val5 = new BepInExInfoLogInterpolatedStringHandler(83, 1, out flag);
+					if (flag)
+					{
+						((BepInExLogInterpolatedStringHandler)val5).AppendLiteral("Hair: '");
+						((BepInExLogInterpolatedStringHandler)val5).AppendFormatted<string>(((Object)val3).name);
+						((BepInExLogInterpolatedStringHandler)val5).AppendLiteral(((int)val == 1) ? "' is strand hair: it gets its own motion vectors while the plugin runs." : "' is strand hair: it gets the camera's motion vectors while the plugin runs.");
+					}
+					Plugin.Info(val5);
+				}
 			}
 		}
 		catch (Exception ex)
@@ -2300,6 +2748,79 @@ public sealed class Capture : MonoBehaviour
 			m_hairFailed = true;
 			Plugin.ModLog.LogWarning((object)("Hair: its motion vectors could not be changed (" + ex.Message + "); left as the game has them."));
 		}
+	}
+
+	private void HairMaterials(Renderer r, bool want)
+	{
+		//IL_001c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0027: Expected Obj, but got Unknown
+		//IL_0032: Unknown result type (might be due to invalid IL or missing references)
+		//IL_003d: Expected Obj, but got Unknown
+		Il2CppReferenceArray<Material> sharedMaterials = r.sharedMaterials;
+		int num = 0;
+		while (sharedMaterials != null && num < ((Il2CppArrayBase<Material>)(object)sharedMaterials).Length)
+		{
+			Material val = ((Il2CppArrayBase<Material>)(object)sharedMaterials)[num];
+			if (!((Object)val == (Object)null) && !((Object)val.shader == (Object)null) && ((Object)val.shader).name.StartsWith("HDRP/Hair", StringComparison.Ordinal))
+			{
+				IntPtr pointer = ((Il2CppObjectBase)val).Pointer;
+				if (!m_hairMatState.ContainsKey(pointer))
+				{
+					int value;
+					if ((!val.HasProperty("_SurfaceType") || !(val.GetFloat("_SurfaceType") > 0.5f)) && val.renderQueue <= 2500)
+					{
+						value = 0;
+					}
+					else if (!val.HasProperty("_TransparentWritesMotionVec"))
+					{
+						value = 1;
+					}
+					else if (val.GetFloat("_TransparentWritesMotionVec") > 0.5f && val.IsKeywordEnabled("_TRANSPARENT_WRITES_MOTION_VEC"))
+					{
+						value = 3;
+					}
+					else if (want)
+					{
+						m_hairMats.Add(new HairMatWas
+						{
+							material = val,
+							value = val.GetFloat("_TransparentWritesMotionVec"),
+							keyword = val.IsKeywordEnabled("_TRANSPARENT_WRITES_MOTION_VEC")
+						});
+						val.SetFloat("_TransparentWritesMotionVec", 1f);
+						val.EnableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
+						value = 2;
+						Plugin.Info((object)("Hair: '" + ((Object)val).name + "' (" + ((Object)val.shader).name + ") is transparent; it writes motion vectors now."));
+					}
+					else
+					{
+						value = 4;
+					}
+					m_hairMatState[pointer] = value;
+				}
+			}
+			num++;
+		}
+	}
+
+	[HideFromIl2Cpp]
+	private string HairMaterialsState()
+	{
+		if (m_hairMatState.Count == 0)
+		{
+			return "Hair materials: none seen yet";
+		}
+		int[] array = new int[5];
+		foreach (int value in m_hairMatState.Values)
+		{
+			array[value]++;
+		}
+		string text = $"Hair materials: {m_hairMatState.Count}; opaque {array[0]}";
+		if (array[1] + array[2] + array[3] + array[4] > 0)
+		{
+			text = text + $", transparent {array[1] + array[2] + array[3] + array[4]}: writing motion {array[2] + array[3]}" + ((array[1] > 0) ? $", shader without the option {array[1]}" : "") + ((array[4] > 0) ? $", left off {array[4]}" : "");
+		}
+		return text;
 	}
 
 	private static bool StrandHair(Renderer r)
@@ -2326,17 +2847,34 @@ public sealed class Capture : MonoBehaviour
 	{
 		//IL_0023: Unknown result type (might be due to invalid IL or missing references)
 		//IL_002e: Expected Obj, but got Unknown
-		//IL_0036: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0044: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
+		//IL_003e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00be: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00c9: Expected Obj, but got Unknown
+		//IL_004c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_006b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0076: Expected Obj, but got Unknown
 		m_hairSeen.Clear();
 		for (int i = 0; i < m_hair.Count; i++)
 		{
 			try
 			{
 				HairWas hairWas = m_hair[i];
-				if ((Object)hairWas.renderer != (Object)null && (int)hairWas.renderer.motionVectorGenerationMode == 0)
+				if ((Object)hairWas.renderer == (Object)null)
+				{
+					continue;
+				}
+				if (hairWas.renderer.motionVectorGenerationMode == m_hairWant)
 				{
 					hairWas.renderer.motionVectorGenerationMode = hairWas.mode;
+				}
+				if (hairWas.skinned)
+				{
+					SkinnedMeshRenderer val = ((Il2CppObjectBase)hairWas.renderer).TryCast<SkinnedMeshRenderer>();
+					if ((Object)val != (Object)null)
+					{
+						val.skinnedMotionVectors = false;
+					}
 				}
 			}
 			catch (Exception)
@@ -2344,6 +2882,26 @@ public sealed class Capture : MonoBehaviour
 			}
 		}
 		m_hair.Clear();
+		for (int j = 0; j < m_hairMats.Count; j++)
+		{
+			try
+			{
+				HairMatWas hairMatWas = m_hairMats[j];
+				if ((Object)hairMatWas.material != (Object)null)
+				{
+					hairMatWas.material.SetFloat("_TransparentWritesMotionVec", hairMatWas.value);
+					if (!hairMatWas.keyword)
+					{
+						hairMatWas.material.DisableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
+					}
+				}
+			}
+			catch (Exception)
+			{
+			}
+		}
+		m_hairMats.Clear();
+		m_hairMatState.Clear();
 		m_hairAt = 0f;
 	}
 
@@ -2572,6 +3130,8 @@ public sealed class Capture : MonoBehaviour
 		//IL_003f: Unknown result type (might be due to invalid IL or missing references)
 		//IL_004b: Expected Obj, but got Unknown
 		//IL_0078: Unknown result type (might be due to invalid IL or missing references)
+		//IL_011b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_015a: Unknown result type (might be due to invalid IL or missing references)
 		if (Time.unscaledTime >= m_fxStatusAt)
 		{
 			m_fxStatusAt = Time.unscaledTime + 0.5f;
@@ -2597,6 +3157,15 @@ public sealed class Capture : MonoBehaviour
 			Note(ref y, x, w, $"The game set the camera's frame settings back {m_camResets} time(s); the plugin's were put on top again each time.");
 		}
 		Note(ref y, x, w, "They are in the frame before DLSS and the network see it, which then carry on whatever they blur or add. A halo round sunlit skin is the game's bloom.");
+		Line(ref y, x, w);
+		Fit(new Rect(x, y, w, 24f), "Fluids", m_stLabel);
+		y += 26f;
+		Fluids.Switch[] all = Fluids.All;
+		for (int j = 0; j < all.Length; j++)
+		{
+			GUI.Label(new Rect(x + 54f, y, w - 54f, 28f), Fluids.State(all[j]), m_stStatus);
+			Check(ref y, x, w, all[j].Name, all[j].Entry);
+		}
 	}
 
 	private void CamBitsHold()
@@ -2635,11 +3204,11 @@ public sealed class Capture : MonoBehaviour
 		FrameSettingsOverrideMask renderingPathCustomFrameSettingsOverrideMask = jitHd.renderingPathCustomFrameSettingsOverrideMask;
 		FrameSettings renderingPathCustomFrameSettings = jitHd.m_RenderingPathCustomFrameSettings;
 		bool customRenderingSettings = jitHd.customRenderingSettings;
-		ulong num = 0xC00 | m_fxOff1;
+		ulong num = m_onBits1 | m_fxOff1;
 		ulong num2 = (ulong)(m_jitJitter ? 134217728 : 0) | m_fxOff2;
 		ulong num3 = num & ~renderingPathCustomFrameSettingsOverrideMask.mask.data1;
 		ulong num4 = num2 & ~renderingPathCustomFrameSettingsOverrideMask.mask.data2;
-		ulong num5 = num & (renderingPathCustomFrameSettings.bitDatas.data1 ^ 0xC00);
+		ulong num5 = num & (renderingPathCustomFrameSettings.bitDatas.data1 ^ m_onBits1);
 		ulong num6 = num2 & renderingPathCustomFrameSettings.bitDatas.data2;
 		if (!customRenderingSettings || num3 != 0L || num4 != 0L || num5 != 0L || num6 != 0L)
 		{
@@ -2653,7 +3222,7 @@ public sealed class Capture : MonoBehaviour
 			}
 			renderingPathCustomFrameSettingsOverrideMask.mask.data1 |= num;
 			renderingPathCustomFrameSettingsOverrideMask.mask.data2 |= num2;
-			renderingPathCustomFrameSettings.bitDatas.data1 = (renderingPathCustomFrameSettings.bitDatas.data1 | 0xC00) & ~m_fxOff1;
+			renderingPathCustomFrameSettings.bitDatas.data1 = (renderingPathCustomFrameSettings.bitDatas.data1 | m_onBits1) & ~m_fxOff1;
 			renderingPathCustomFrameSettings.bitDatas.data2 &= ~num2;
 			jitHd.renderingPathCustomFrameSettingsOverrideMask = renderingPathCustomFrameSettingsOverrideMask;
 			jitHd.m_RenderingPathCustomFrameSettings = renderingPathCustomFrameSettings;
@@ -2667,49 +3236,49 @@ public sealed class Capture : MonoBehaviour
 
 	private void JitterSet(Camera cam, bool want, bool jitter = false, float bias = 0f)
 	{
-		//IL_00e1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ec: Expected Obj, but got Unknown
-		//IL_0022: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002d: Expected Obj, but got Unknown
-		//IL_0084: Unknown result type (might be due to invalid IL or missing references)
-		//IL_008f: Expected Obj, but got Unknown
-		//IL_0035: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0040: Expected Obj, but got Unknown
-		//IL_0106: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0111: Expected Obj, but got Unknown
-		//IL_0097: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00a2: Expected Obj, but got Unknown
-		//IL_004d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0058: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0062: Expected Obj, but got Unknown
-		//IL_0062: Expected Obj, but got Unknown
-		//IL_0121: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0126: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0150: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0155: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0157: Unknown result type (might be due to invalid IL or missing references)
-		//IL_015c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00f0: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00fb: Expected Obj, but got Unknown
+		//IL_0028: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0033: Expected Obj, but got Unknown
+		//IL_0093: Unknown result type (might be due to invalid IL or missing references)
+		//IL_009e: Expected Obj, but got Unknown
+		//IL_003b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0046: Expected Obj, but got Unknown
+		//IL_0115: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0120: Expected Obj, but got Unknown
+		//IL_00a6: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00b1: Expected Obj, but got Unknown
+		//IL_0053: Unknown result type (might be due to invalid IL or missing references)
+		//IL_005e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0068: Expected Obj, but got Unknown
+		//IL_0068: Expected Obj, but got Unknown
+		//IL_0130: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0135: Unknown result type (might be due to invalid IL or missing references)
 		//IL_015f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0160: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0170: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0164: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0167: Unknown result type (might be due to invalid IL or missing references)
+		//IL_016c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_016f: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0171: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0181: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0183: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0193: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0195: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00af: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ba: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c4: Expected Obj, but got Unknown
-		//IL_00c4: Expected Obj, but got Unknown
-		//IL_04a8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_04ae: Invalid comparison between Unknown and I4
-		//IL_04b7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_04bc: Unknown result type (might be due to invalid IL or missing references)
-		//IL_028b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0292: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ed: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02f4: Expected Obj, but got Unknown
-		//IL_030a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01a5: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01a7: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00be: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00c9: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00d3: Expected Obj, but got Unknown
+		//IL_00d3: Expected Obj, but got Unknown
+		//IL_04c2: Unknown result type (might be due to invalid IL or missing references)
+		//IL_04c8: Invalid comparison between Unknown and I4
+		//IL_04d1: Unknown result type (might be due to invalid IL or missing references)
+		//IL_04d6: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02a4: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02ac: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0307: Unknown result type (might be due to invalid IL or missing references)
+		//IL_030e: Expected Obj, but got Unknown
+		//IL_0324: Unknown result type (might be due to invalid IL or missing references)
 		if (m_jitFailed)
 		{
 			return;
@@ -2717,7 +3286,8 @@ public sealed class Capture : MonoBehaviour
 		try
 		{
 			EffectsOff(out var off, out var off2);
-			if (m_camOn && (!want || (Object)cam == (Object)null || (Object)m_jitHd == (Object)null || (Object)((Component)m_jitHd).gameObject != (Object)((Component)cam).gameObject || jitter != m_jitJitter || off != m_fxOff1 || off2 != m_fxOff2))
+			ulong onBits = OnBits1;
+			if (m_camOn && (!want || (Object)cam == (Object)null || (Object)m_jitHd == (Object)null || (Object)((Component)m_jitHd).gameObject != (Object)((Component)cam).gameObject || jitter != m_jitJitter || off != m_fxOff1 || off2 != m_fxOff2 || onBits != m_onBits1))
 			{
 				m_camQuiet = want && (Object)cam != (Object)null && (Object)m_jitHd != (Object)null && (Object)((Component)m_jitHd).gameObject == (Object)((Component)cam).gameObject && jitter == m_jitJitter;
 				JitterRestore();
@@ -2745,8 +3315,9 @@ public sealed class Capture : MonoBehaviour
 				m_jitSet1Was = renderingPathCustomFrameSettings.bitDatas.data1;
 				m_jitSet2Was = renderingPathCustomFrameSettings.bitDatas.data2;
 				bool flag = !m_jitCustomWas || (m_jitMask1Was & 0xC00) != 3072 || (m_jitSet1Was & 0xC00) == 3072;
-				renderingPathCustomFrameSettingsOverrideMask.mask.data1 |= 3072uL;
-				renderingPathCustomFrameSettings.bitDatas.data1 |= 3072uL;
+				m_onBits1 = onBits;
+				renderingPathCustomFrameSettingsOverrideMask.mask.data1 |= m_onBits1;
+				renderingPathCustomFrameSettings.bitDatas.data1 |= m_onBits1;
 				if (jitter)
 				{
 					renderingPathCustomFrameSettingsOverrideMask.mask.data2 |= 134217728uL;
@@ -2836,17 +3407,17 @@ public sealed class Capture : MonoBehaviour
 		//IL_002c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0033: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
-		//IL_005b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_005c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_007e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_007f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00a1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00a2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c4: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_013a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0062: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0063: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0085: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0086: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00a8: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00a9: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00cb: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00cc: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00ed: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00f9: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0141: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
 			if (m_camOn && (Object)m_jitHd != (Object)null)
@@ -2854,7 +3425,7 @@ public sealed class Capture : MonoBehaviour
 				FrameSettingsOverrideMask renderingPathCustomFrameSettingsOverrideMask = m_jitHd.renderingPathCustomFrameSettingsOverrideMask;
 				FrameSettings renderingPathCustomFrameSettings = m_jitHd.m_RenderingPathCustomFrameSettings;
 				EffectsAll(out var all, out var all2);
-				all |= 0xC00;
+				all |= 0xC00 | m_onBits1;
 				all2 |= 0x8000000;
 				renderingPathCustomFrameSettingsOverrideMask.mask.data1 = (renderingPathCustomFrameSettingsOverrideMask.mask.data1 & ~all) | (m_jitMask1Was & all);
 				renderingPathCustomFrameSettingsOverrideMask.mask.data2 = (renderingPathCustomFrameSettingsOverrideMask.mask.data2 & ~all2) | (m_jitMask2Was & all2);
@@ -3050,7 +3621,7 @@ public sealed class Capture : MonoBehaviour
 		}
 	}
 
-	private unsafe bool ReflexMode(bool on, bool boost)
+	private unsafe bool ReflexMode(bool on, bool boost, uint intervalUs)
 	{
 		//IL_008d: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0094: Expected Obj, but got Unknown
@@ -3059,7 +3630,7 @@ public sealed class Capture : MonoBehaviour
 			version = (uint)(sizeof(SleepMode) | 0x10000),
 			lowLatency = (on ? ((byte)1) : ((byte)0)),
 			boost = (byte)((on & boost) ? 1u : 0u),
-			minimumIntervalUs = 0u,
+			minimumIntervalUs = intervalUs,
 			useMarkers = 0
 		};
 		int num = m_setSleepMode(m_device, ref mode);
@@ -3085,9 +3656,160 @@ public sealed class Capture : MonoBehaviour
 		return true;
 	}
 
+	private double RefreshHz()
+	{
+		//IL_001d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0022: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0025: Unknown result type (might be due to invalid IL or missing references)
+		//IL_002a: Unknown result type (might be due to invalid IL or missing references)
+		float unscaledTime = Time.unscaledTime;
+		if (unscaledTime >= m_refreshAt)
+		{
+			m_refreshAt = unscaledTime + 2f;
+			try
+			{
+				Resolution currentResolution = Screen.currentResolution;
+				RefreshRate refreshRateRatio = currentResolution.refreshRateRatio;
+				m_refreshHz = refreshRateRatio.value;
+			}
+			catch (Exception)
+			{
+				m_refreshHz = 0.0;
+			}
+			try
+			{
+				m_vsync = QualitySettings.vSyncCount;
+			}
+			catch (Exception)
+			{
+				m_vsync = -1;
+			}
+		}
+		return m_refreshHz;
+	}
+
+	private uint FrameCapUs()
+	{
+		if (!Plugin.FgFrameCap.Value || !Plugin.FrameGen.Value || m_fgFailed || !m_fgOpened)
+		{
+			return 0u;
+		}
+		double num = RefreshHz();
+		if (m_vsync <= 0 || num < 20.0 || num > 1000.0)
+		{
+			return 0u;
+		}
+		return (uint)Math.Ceiling(1000000.0 * (double)(m_fgTotal * m_vsync) / num);
+	}
+
+	private void CountStep()
+	{
+		if (!m_menu)
+		{
+			m_fpsAt = 0L;
+			m_fpsShown = 0f;
+			m_shownRate = 0f;
+			m_presentedAt = -1.0;
+			m_nrWaitAt = -1;
+			m_nrWaitMs = 0.0;
+			m_cntTab = -1;
+			return;
+		}
+		m_cntFrames++;
+		ShownStep();
+		long timestamp = Stopwatch.GetTimestamp();
+		if (m_fpsAt != 0L)
+		{
+			float num = (float)((double)Stopwatch.Frequency / (double)Math.Max(1L, timestamp - m_fpsAt));
+			m_fpsShown = ((m_fpsShown > 0f) ? Mathf.Lerp(m_fpsShown, num, 0.05f) : num);
+		}
+		m_fpsAt = timestamp;
+	}
+
+	private void ShownStep()
+	{
+		double num = (double)Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
+		if (m_presentedAt >= 0.0 && num < m_presentedAt + 1.0)
+		{
+			return;
+		}
+		if (!m_fgOpened || m_fgFailed)
+		{
+			m_shownRate = 0f;
+			m_presentedAt = -1.0;
+			return;
+		}
+		uint num2 = (uint)(m_presenterVisible ? Presenter.cp_shown() : Native.vdn_fg_presented());
+		if (m_presentedAt >= 0.0 && num2 >= m_presentedWas)
+		{
+			m_shownRate = (float)((double)(num2 - m_presentedWas) / (num - m_presentedAt));
+		}
+		m_presentedWas = num2;
+		m_presentedAt = num;
+	}
+
+	private void PresenterStep()
+	{
+		if (!Presenter.Loaded)
+		{
+			m_presenterOn = false;
+			m_presenterVisible = false;
+			return;
+		}
+		bool flag = Plugin.FgOwnPresenter.Value && Plugin.FrameGen.Value && m_fgOpened && !m_fgFailed && QualitySettings.vSyncCount == 0;
+		try
+		{
+			bool flag2 = Presenter.cp_tick(flag ? 1 : 0, 0, Plugin.FgPacing.Value ? 1 : 0) != 0;
+			bool flag3 = Presenter.cp_failed() != 0;
+			m_presenterOn = flag && !flag3;
+			if (flag3 && !m_presenterFailTold)
+			{
+				m_presenterFailTold = true;
+				Plugin.ModLog.LogWarning((object)("Frame generation's own presenter " + Native.Text(Presenter.cp_status()) + "; the bridge shows the frames itself again."));
+			}
+			if (flag2 != m_presenterVisible)
+			{
+				m_presenterVisible = flag2;
+				m_presentedAt = -1.0;
+			}
+		}
+		catch (Exception ex)
+		{
+			Presenter.Loaded = false;
+			m_presenterOn = false;
+			m_presenterVisible = false;
+			Plugin.ModLog.LogWarning((object)("Frame generation's own presenter failed (" + ex.Message + "); the bridge shows the frames itself."));
+		}
+	}
+
+	private void QueueStep()
+	{
+		try
+		{
+			int maxQueuedFrames = QualitySettings.maxQueuedFrames;
+			if (Plugin.ShortQueue.Value && QualitySettings.vSyncCount == 0)
+			{
+				if (maxQueuedFrames != 1)
+				{
+					m_queueWas = maxQueuedFrames;
+					QualitySettings.maxQueuedFrames = 1;
+				}
+			}
+			else if (m_queueWas >= 0)
+			{
+				QualitySettings.maxQueuedFrames = m_queueWas;
+				m_queueWas = -1;
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
 	private void ReflexStep()
 	{
-		bool flag = Plugin.Reflex.Value && Native.Loaded;
+		uint num = FrameCapUs();
+		bool flag = (Plugin.Reflex.Value || num != 0) && Native.Loaded;
 		if (!flag && !m_reflexOn)
 		{
 			return;
@@ -3103,35 +3825,39 @@ public sealed class Capture : MonoBehaviour
 				return;
 			}
 			bool value = Plugin.ReflexBoost.Value;
-			if (flag != m_reflexOn || (flag && value != m_reflexBoost))
+			bool value2 = Plugin.Reflex.Value;
+			if (flag != m_reflexOn || (flag && (value != m_reflexBoost || value2 != m_reflexLow || num != m_reflexCap)))
 			{
-				if (!ReflexMode(flag, value))
+				if (!ReflexMode(flag & value2, value, flag ? num : 0u))
 				{
 					m_reflexFails++;
 					return;
 				}
 				m_reflexOn = flag;
 				m_reflexBoost = value;
+				m_reflexLow = value2;
+				m_reflexCap = (flag ? num : 0u);
+				string text = ((m_reflexCap != 0) ? $"cap {1000000.0 / (double)m_reflexCap:F2}/s" : "");
 				ref string reflexState = ref ReflexState;
-				string text;
+				string text2;
 				if (flag)
 				{
-					text = (value ? "on, with boost" : "on");
+					text2 = ((!value2) ? ("off, " + text) : ((value ? "on, with boost" : "on") + ((text.Length > 0) ? (", " + text) : "")));
 				}
 				else
 				{
-					text = "off";
+					text2 = "off";
 				}
-				reflexState = text;
+				reflexState = text2;
 				Plugin.Info((object)("Reflex: low latency " + ReflexState + "."));
 			}
 			if (m_reflexOn)
 			{
-				int num = m_sleep(m_device);
-				if (num != 0 && ++m_reflexFails > 3)
+				int num2 = m_sleep(m_device);
+				if (num2 != 0 && ++m_reflexFails > 3)
 				{
-					ReflexState = "stopped (the driver's sleep fails: " + num + ")";
-					Plugin.Info((object)("Reflex: the driver's sleep keeps failing (" + num + "); no longer called."));
+					ReflexState = "stopped (the driver's sleep fails: " + num2 + ")";
+					Plugin.Info((object)("Reflex: the driver's sleep keeps failing (" + num2 + "); no longer called."));
 				}
 			}
 		}
@@ -3359,35 +4085,65 @@ public sealed class Capture : MonoBehaviour
 		return true;
 	}
 
+	private static bool Fluid(Renderer r)
+	{
+		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0043: Expected Obj, but got Unknown
+		//IL_0061: Unknown result type (might be due to invalid IL or missing references)
+		//IL_006c: Expected Obj, but got Unknown
+		string name = ((Object)r).name;
+		if (s_fluidObjects.Contains(name))
+		{
+			return true;
+		}
+		StringBuilder stringBuilder = new StringBuilder(name);
+		Il2CppReferenceArray<Material> sharedMaterials = r.sharedMaterials;
+		int num = 0;
+		while (sharedMaterials != null && num < ((Il2CppArrayBase<Material>)(object)sharedMaterials).Length)
+		{
+			Material val = ((Il2CppArrayBase<Material>)(object)sharedMaterials)[num];
+			if ((Object)val != (Object)null)
+			{
+				stringBuilder.Append(' ').Append(((Object)val).name);
+				if ((Object)val.shader != (Object)null)
+				{
+					stringBuilder.Append(' ').Append(((Object)val.shader).name);
+				}
+			}
+			num++;
+		}
+		return s_fluidName.IsMatch(stringBuilder.ToString());
+	}
+
 	private void MaskClassify(Renderer val2)
 	{
-		//IL_001c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0027: Expected Obj, but got Unknown
-		//IL_0034: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003f: Expected Obj, but got Unknown
-		//IL_0051: Unknown result type (might be due to invalid IL or missing references)
-		//IL_005c: Expected Obj, but got Unknown
-		//IL_0042: Unknown result type (might be due to invalid IL or missing references)
-		//IL_004d: Expected Obj, but got Unknown
-		//IL_0152: Unknown result type (might be due to invalid IL or missing references)
-		//IL_015d: Expected Obj, but got Unknown
-		//IL_0064: Unknown result type (might be due to invalid IL or missing references)
-		//IL_006f: Expected Obj, but got Unknown
-		//IL_0184: Unknown result type (might be due to invalid IL or missing references)
-		//IL_018f: Expected Obj, but got Unknown
-		//IL_00c3: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ce: Expected Obj, but got Unknown
-		//IL_00e9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f4: Expected Obj, but got Unknown
-		//IL_01b7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01c2: Expected Obj, but got Unknown
-		//IL_00fd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0108: Expected Obj, but got Unknown
-		//IL_01d9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01e4: Expected Obj, but got Unknown
-		//IL_02d7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02e2: Expected Obj, but got Unknown
-		if (((Object)val2).name.StartsWith("CMA", StringComparison.Ordinal))
+		//IL_0025: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0030: Expected Obj, but got Unknown
+		//IL_003d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0048: Expected Obj, but got Unknown
+		//IL_015b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0166: Expected Obj, but got Unknown
+		//IL_005a: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0065: Expected Obj, but got Unknown
+		//IL_004b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0056: Expected Obj, but got Unknown
+		//IL_018d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0198: Expected Obj, but got Unknown
+		//IL_006d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0078: Expected Obj, but got Unknown
+		//IL_00cc: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00d7: Expected Obj, but got Unknown
+		//IL_01c0: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01cb: Expected Obj, but got Unknown
+		//IL_00f2: Unknown result type (might be due to invalid IL or missing references)
+		//IL_00fd: Expected Obj, but got Unknown
+		//IL_0106: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0111: Expected Obj, but got Unknown
+		//IL_01e2: Unknown result type (might be due to invalid IL or missing references)
+		//IL_01ed: Expected Obj, but got Unknown
+		//IL_02e0: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02eb: Expected Obj, but got Unknown
+		if (((Object)val2).name.StartsWith("CMA", StringComparison.Ordinal) || Fluid(val2))
 		{
 			return;
 		}
@@ -3938,8 +4694,38 @@ public sealed class Capture : MonoBehaviour
 		//IL_01cd: Unknown result type (might be due to invalid IL or missing references)
 		//IL_01f1: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0206: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0228: Unknown result type (might be due to invalid IL or missing references)
+		//IL_022d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0243: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0248: Unknown result type (might be due to invalid IL or missing references)
+		//IL_025e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0263: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0279: Unknown result type (might be due to invalid IL or missing references)
+		//IL_027e: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0294: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0299: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02af: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02b4: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02ca: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02cf: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02e5: Unknown result type (might be due to invalid IL or missing references)
+		//IL_02ea: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0300: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0305: Unknown result type (might be due to invalid IL or missing references)
+		//IL_031c: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0321: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0338: Unknown result type (might be due to invalid IL or missing references)
+		//IL_033d: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0354: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0359: Unknown result type (might be due to invalid IL or missing references)
 		//IL_000e: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0019: Expected Obj, but got Unknown
+		//IL_0382: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0387: Unknown result type (might be due to invalid IL or missing references)
+		//IL_038f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0396: Unknown result type (might be due to invalid IL or missing references)
+		//IL_039e: Expected Obj, but got Unknown
+		//IL_03ad: Unknown result type (might be due to invalid IL or missing references)
 		if (m_stTitle == null || !((Object)m_texPanel != (Object)null))
 		{
 			m_texPanel = Flat(new Color(0.06f, 0.065f, 0.08f, 0.94f));
@@ -3979,6 +4765,32 @@ public sealed class Capture : MonoBehaviour
 			m_stSmall.normal.textColor = new Color(0.62f, 0.64f, 0.7f);
 			m_stButton.normal.textColor = new Color(0.85f, 0.86f, 0.9f);
 			m_stButtonOn.normal.textColor = Color.white;
+			Color[] array = new Color[12]
+			{
+				new Color(0.45f, 0.85f, 1f),
+				new Color(0.62f, 0.92f, 0.45f),
+				new Color(1f, 0.78f, 0.35f),
+				new Color(1f, 0.52f, 0.55f),
+				new Color(0.78f, 0.62f, 1f),
+				new Color(1f, 0.95f, 0.5f),
+				new Color(0.45f, 1f, 0.82f),
+				new Color(1f, 0.62f, 0.92f),
+				new Color(0.65f, 0.75f, 1f),
+				new Color(1f, 0.68f, 0.45f),
+				new Color(0.82f, 1f, 0.55f),
+				new Color(0.88f, 0.88f, 0.92f)
+			};
+			m_stCount = new GUIStyle[array.Length];
+			for (int i = 0; i < array.Length; i++)
+			{
+				m_stCount[i] = new GUIStyle(GUI.skin.label)
+				{
+					fontSize = 14,
+					alignment = (TextAnchor)3,
+					wordWrap = false
+				};
+				m_stCount[i].normal.textColor = array[i];
+			}
 		}
 	}
 
@@ -4156,23 +4968,23 @@ public sealed class Capture : MonoBehaviour
 		//IL_0088: Expected Obj, but got Unknown
 		//IL_0121: Unknown result type (might be due to invalid IL or missing references)
 		//IL_012c: Expected Obj, but got Unknown
-		//IL_0235: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ed: Unknown result type (might be due to invalid IL or missing references)
-		//IL_05d8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0660: Unknown result type (might be due to invalid IL or missing references)
-		//IL_066f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0693: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06a2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06ce: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06d4: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06d6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06dd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06fc: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06e6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06ec: Invalid comparison between Unknown and I4
-		//IL_0487: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06f0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_06f6: Invalid comparison between Unknown and I4
+		//IL_02ca: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0358: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0681: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0722: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0731: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0755: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0764: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0790: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0796: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0798: Unknown result type (might be due to invalid IL or missing references)
+		//IL_079f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_07be: Unknown result type (might be due to invalid IL or missing references)
+		//IL_07a8: Unknown result type (might be due to invalid IL or missing references)
+		//IL_07ae: Invalid comparison between Unknown and I4
+		//IL_0530: Unknown result type (might be due to invalid IL or missing references)
+		//IL_07b2: Unknown result type (might be due to invalid IL or missing references)
+		//IL_07b8: Invalid comparison between Unknown and I4
 		if (!m_menu)
 		{
 			return;
@@ -4184,7 +4996,7 @@ public sealed class Capture : MonoBehaviour
 		float num2 = 30f;
 		float num3 = 30f;
 		Rect val = default;
-		val = new Rect(num2, num3, 430f, 860f);
+		val = new Rect(num2, num3, 430f, 1030f);
 		if ((int)Event.current.type == 7)
 		{
 			GUI.DrawTexture(val, (Texture)m_texPanel);
@@ -4192,24 +5004,25 @@ public sealed class Capture : MonoBehaviour
 		float num4 = num2 + 16f;
 		float num5 = 398f;
 		float num6 = num3 + 10f;
-		GUI.Label(new Rect(num4, num6, num5, 30f), "DLSS / Neural Rendering  0.8.3", m_stTitle);
+		GUI.Label(new Rect(num4, num6, num5, 30f), "DLSS / Neural Rendering  0.9.15", m_stTitle);
 		num6 += 32f;
 		bool flag = m_srOpen && !m_srFailed;
 		bool flag2 = m_view >= 0 && m_initialised;
-		string value;
+		string text;
 		if (!Plugin.Enabled.Value && !Plugin.Upscale.Value)
 		{
-			value = "everything is off";
+			text = "everything is off";
 		}
 		else if (m_failed)
 		{
-			value = "failed, see BepInEx/LogOutput.log";
+			text = "failed, see BepInEx/LogOutput.log";
 		}
 		else
 		{
-			value = (((Object)m_target != (Object)null) ? ($"render {((Texture)m_target).width}x{((Texture)m_target).height} -> screen {m_outW}x{m_outH}" + ((!flag) ? "" : ((((Texture)m_target).width < m_outW) ? ", DLSS upscaling" : ", DLAA")) + (flag2 ? ", neural rendering" : "") + (m_fgOn ? (", frame generation x" + m_fgTotal) : "")) : "waiting for the camera");
+			text = (((Object)m_target != (Object)null) ? ($"render {((Texture)m_target).width}x{((Texture)m_target).height} -> screen {m_outW}x{m_outH}" + ((!flag) ? "" : ((((Texture)m_target).width < m_outW) ? ", DLSS upscaling" : ", DLAA")) + (flag2 ? ", neural rendering" : "") + (m_fgOn ? (", frame generation x" + m_fgTotal) : "")) : "waiting for the camera");
 		}
-		GUI.Label(new Rect(num4, num6, num5, 40f), $"{m_fpsShown:0} fps rendered · {value}", m_stSmall);
+		string text2 = ((m_fgOn && m_shownRate > 0f) ? $"{m_shownRate:0} fps shown, {m_fpsShown:0} rendered" : $"{m_fpsShown:0} fps rendered");
+		GUI.Label(new Rect(num4, num6, num5, 40f), text2 + " · " + text, m_stSmall);
 		num6 += 38f;
 		string[] array = new string[6] { "DLSS", "Neural", "Mask", "Frame Gen", "Game", "Bridge" };
 		float num7 = (num5 - 20f) / 6f;
@@ -4236,8 +5049,11 @@ public sealed class Capture : MonoBehaviour
 			}
 			Slider(ref num6, num4, num5, "Sharpness" + ((SharpState.Length > 0) ? ("  (" + SharpState + ")") : ""), Plugin.Sharpness, 0f, 1f, 4);
 			Choice(ref num6, num4, num5, "Model preset", new string[6] { "Auto", "K", "M", "L", "E", "F" }, new int[6] { 0, 11, 13, 12, 5, 6 }, Plugin.Preset);
-			GUI.Label(new Rect(num4, num6, num5, 166f), "DLAA keeps the full resolution and only anti-aliases; the other qualities render a smaller frame and reconstruct it, for more frames a second.\nModel preset: K is the sharpest and steadiest, M is faster; Auto takes K, and M for Performance and Ultra Performance. E and F are the older, much lighter models for RTX 20 and 30 cards: E for upscaling, F for DLAA and Ultra Performance.\nL is NVIDIA's newest model, made for Ultra Performance (NVIDIA's own pick for it); it is heavier than K and M.", m_stSmall);
-			num6 += 170f;
+			Check(ref num6, num4, num5, "Hair moves with the head (own motion vectors)", Plugin.HairOwnMotion);
+			Check(ref num6, num4, num5, "Hair's soft edges write motion too", Plugin.HairTransparentMotion);
+			Note(ref num6, num4, num5, HairMaterialsState());
+			GUI.Label(new Rect(num4, num6, num5, 162f), "DLAA keeps the full resolution and only anti-aliases; the other qualities render a smaller frame and reconstruct it, for more frames a second.\nModel preset: K is the sharpest and steadiest, M is faster; Auto takes K, and M for Performance and Ultra Performance. E and F are the older, much lighter models for RTX 20 and 30 cards: E for upscaling, F for DLAA and Ultra Performance.\nL is NVIDIA's newest model, made for Ultra Performance (NVIDIA's own pick for it); it is heavier than K and M.", m_stSmall);
+			num6 += 166f;
 		}
 		else if (m_tab == 1)
 		{
@@ -4250,6 +5066,8 @@ public sealed class Capture : MonoBehaviour
 			Choice(ref num6, num4, num5, "Passes", new string[3] { "1", "2", "3" }, new int[3] { 1, 2, 3 }, Plugin.Passes);
 			GUI.Label(new Rect(num4, num6, num5, 96f), "Intensity is how much of the network's result is shown. Local tone is its relighting, Local structure the fine detail it adds.\nWith DLSS on, the network works on the smaller frame before DLSS; \"After DLSS\" runs it on the full picture instead. Every pass costs the network's whole time again.", m_stSmall);
 			num6 += 100f;
+			Line(ref num6, num4, num5);
+			Counters(ref num6, num4, num5, 1);
 		}
 		else if (m_tab == 2)
 		{
@@ -4267,7 +5085,7 @@ public sealed class Capture : MonoBehaviour
 		{
 			MenuFrameGen(ref num6, num4, num5);
 		}
-		GUI.Label(new Rect(num4, num3 + 860f - 30f, num5, 24f), "Window: " + ((object)Plugin.MenuKey.Value).ToString() + " (BepInEx/config/community.cma.dlssnr.cfg)", m_stSmall);
+		GUI.Label(new Rect(num4, num3 + 1030f - 30f, num5, 24f), "Window: " + ((object)Plugin.MenuKey.Value).ToString() + " (BepInEx/config/community.cma.dlssnr.cfg)", m_stSmall);
 		GUI.matrix = matrix;
 		Event current = Event.current;
 		Rect val2 = default;
@@ -4316,7 +5134,6 @@ public sealed class Capture : MonoBehaviour
 			while (val != null && num2 < val.Length)
 			{
 				Renderer val2 = val[num2];
-				TransparentMotion(val2);
 				if (!((Object)val2 == (Object)null) && Unseen(m_motionSeen, val2) && (int)val2.motionVectorGenerationMode == 2)
 				{
 					Scene scene = ((Component)val2).gameObject.scene;
@@ -4380,38 +5197,6 @@ public sealed class Capture : MonoBehaviour
 		}
 	}
 
-	// Skin, brows, the scalp cap and the like are materials of the transparent queue (2500-2999) in this game, and those
-	// write no motion vectors in HDRP: DLSS has none for them and smears what lies under (the forehead under the scalp
-	// cap). Each such material is told to write them while the plugin runs; given back in MotionRestore.
-	private readonly List<Material> m_transMotion = new List<Material>();
-
-	private readonly HashSet<int> m_transSeen = new HashSet<int>();
-
-	private void TransparentMotion(Renderer r)
-	{
-		if ((Object)r == (Object)null || !Plugin.TransparentMotionVec.Value || !m_transSeen.Add(((Object)r).GetInstanceID()))
-		{
-			return;
-		}
-		try
-		{
-			Il2CppReferenceArray<Material> sharedMaterials = r.sharedMaterials;
-			for (int i = 0; sharedMaterials != null && i < sharedMaterials.Length; i++)
-			{
-				Material val = sharedMaterials[i];
-				if (!((Object)val == (Object)null) && val.renderQueue >= 2500 && val.renderQueue < 3000 && val.HasProperty("_TransparentWritingMotionVec") && !(val.GetFloat("_TransparentWritingMotionVec") > 0.5f))
-				{
-					val.SetFloat("_TransparentWritingMotionVec", 1f);
-					val.EnableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
-					m_transMotion.Add(val);
-				}
-			}
-		}
-		catch (Exception)
-		{
-		}
-	}
-
 	private void MotionRestore()
 	{
 		//IL_0030: Unknown result type (might be due to invalid IL or missing references)
@@ -4420,20 +5205,6 @@ public sealed class Capture : MonoBehaviour
 		//IL_007e: Expected Obj, but got Unknown
 		//IL_003e: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0044: Invalid comparison between Unknown and I4
-		foreach (Material item in m_transMotion)
-		{
-			if ((Object)item != (Object)null)
-			{
-				item.SetFloat("_TransparentWritingMotionVec", 0f);
-				item.DisableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
-			}
-		}
-		if (m_transMotion.Count > 0)
-		{
-			Plugin.Info((object)("Motion: " + m_transMotion.Count + " transparent material(s) wrote motion vectors; given back."));
-		}
-		m_transMotion.Clear();
-		m_transSeen.Clear();
 		m_motionSeen.Clear();
 		if (m_noMotion.Count == 0)
 		{
@@ -4604,9 +5375,8 @@ public sealed class Capture : MonoBehaviour
 		return PresetFor(quality, Plugin.Preset.Value);
 	}
 
-	// The preset for a quality given the one the window asked for. A feature that is already open keeps the preset it was
-	// opened with until the swap (close, open) takes place: configuring it in place with another preset as well made the
-	// game crash when switching to Auto (the in-place rebuild and the close-open followed each other).
+	// The preset for a quality given the one asked for. A feature that is already open keeps the preset it was opened with
+	// until the swap (close, open) takes place: configuring it in place with another one as well crashed the game.
 	private static uint PresetFor(int quality, int value)
 	{
 		if (Chosen(value))
@@ -4782,7 +5552,7 @@ public sealed class Capture : MonoBehaviour
 				return;
 			}
 			int num2 = Mathf.Clamp(Plugin.Quality.Value, 0, 4);
-			bool flag = num2 == 4 && !Plugin.NativeUltraQuality.Value;
+			bool flag = num2 == 4;
 			int num3 = SrQuery((uint)ow, (uint)oh, flag ? 2u : ((uint)num2), out var renderW, out var renderH, out var minW, out var minH, out var maxW, out var maxH, out var _);
 			bool flag2 = false;
 			if ((num3 == 0) & flag)
@@ -4937,7 +5707,7 @@ public sealed class Capture : MonoBehaviour
 				m_srQuality = num;
 				m_srModel = num2;
 				m_srAuto = value;
-				Native.vdn_sr_configure((uint)rw, (uint)rh, (uint)ow, (uint)oh, (num == 4 && !Plugin.NativeUltraQuality.Value) ? 2u : ((uint)mode), PresetFor(mode, num2), Plugin.DepthInverted.Value ? 1 : 0, value ? 1 : 0, 0, 1u);
+				Native.vdn_sr_configure((uint)rw, (uint)rh, (uint)ow, (uint)oh, (num == 4) ? 2u : ((uint)mode), PresetFor(mode, num2), Plugin.DepthInverted.Value ? 1 : 0, value ? 1 : 0, 0, 1u);
 			}
 			int num3 = Native.vdn_sr_set_textures(0, intPtr, intPtr2, intPtr3, intPtr4);
 			if (num3 != 0)
@@ -4971,7 +5741,7 @@ public sealed class Capture : MonoBehaviour
 					((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(s_qualities[num]);
 					((BepInExLogInterpolatedStringHandler)val).AppendLiteral(", preset ");
 					((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(PresetName(PresetFor(mode, num2)));
-					((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(Chosen(num2) ? ", chosen" : ", chosen for the quality");
+					((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(Chosen(Plugin.Preset.Value) ? ", chosen" : ", chosen for the quality");
 					((BepInExLogInterpolatedStringHandler)val).AppendLiteral(").");
 				}
 				Plugin.Info(val);

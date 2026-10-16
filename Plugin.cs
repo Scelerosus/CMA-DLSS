@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace CMADlssNr;
 
-[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.8.3")]
+[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.9.15")]
 [BepInProcess("Corrupted Modeling Agency.exe")]
 public sealed class Plugin : BasePlugin
 {
@@ -18,7 +18,7 @@ public sealed class Plugin : BasePlugin
 
 	public const string PluginName = "CMA DLSS NR";
 
-	public const string PluginVersion = "0.8.3";
+	public const string PluginVersion = "0.9.15";
 
 	internal static ManualLogSource ModLog;
 
@@ -31,6 +31,12 @@ public sealed class Plugin : BasePlugin
 	internal static ConfigEntry<bool> Upscale;
 
 	internal static ConfigEntry<bool> AutoExposure;
+
+	internal static ConfigEntry<bool> HairOwnMotion;
+
+	internal static ConfigEntry<float> RenderScale;
+
+	internal static ConfigEntry<bool> HairTransparentMotion;
 
 	internal static ConfigEntry<bool> VerboseLog;
 
@@ -52,9 +58,31 @@ public sealed class Plugin : BasePlugin
 
 	internal static ConfigEntry<bool> FgInvertMotionY;
 
+	internal static ConfigEntry<bool> FgResetOnCuts;
+
+	internal static ConfigEntry<bool> FgFrameCap;
+
+	internal static ConfigEntry<int> FgPacingFloor;
+
+	internal static ConfigEntry<int> FgMotionUnits;
+
+	internal static ConfigEntry<bool> FgOwnPresenter;
+
 	internal static ConfigEntry<bool> Reflex;
 
 	internal static ConfigEntry<bool> ReflexBoost;
+
+	internal static ConfigEntry<bool> ShortQueue;
+
+	internal static ConfigEntry<bool> FluidSemen;
+
+	internal static ConfigEntry<bool> FluidSquirt;
+
+	internal static ConfigEntry<bool> FluidSim;
+
+	internal static ConfigEntry<bool> FluidDrool;
+
+	internal static ConfigEntry<bool> FluidVag;
 
 	internal static ConfigEntry<bool> Mask;
 
@@ -120,6 +148,8 @@ public sealed class Plugin : BasePlugin
 
 	internal static ConfigEntry<int> StaticShadowsAtlas;
 
+	internal static ConfigEntry<bool> UseShadowCache;
+
 	internal static ConfigFile Cfg;
 
 	internal static readonly ConfigEntry<float>[] RegionEffect = new ConfigEntry<float>[4];
@@ -133,12 +163,6 @@ public sealed class Plugin : BasePlugin
 	internal static ConfigEntry<float> LocalStructure;
 
 	internal static ConfigEntry<float> UltraQualityScale;
-
-	internal static ConfigEntry<bool> NativeUltraQuality;
-
-	internal static ConfigEntry<float> RenderScale;
-
-	internal static ConfigEntry<bool> TransparentMotionVec;
 
 	internal static ConfigEntry<float> Sharpness;
 
@@ -168,11 +192,11 @@ public sealed class Plugin : BasePlugin
 
 	public override void Load()
 	{
-		//IL_08b9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_08bf: Expected Obj, but got Unknown
-		//IL_086a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0870: Expected Obj, but got Unknown
-		//IL_0972: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0a5f: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0a65: Expected Obj, but got Unknown
+		//IL_0a0b: Unknown result type (might be due to invalid IL or missing references)
+		//IL_0a11: Expected Obj, but got Unknown
+		//IL_0b18: Unknown result type (might be due to invalid IL or missing references)
 		ModLog = ((BasePlugin)this).Log;
 		Cfg = ((BasePlugin)this).Config;
 		((BasePlugin)this).Config.SaveOnConfigSet = false;
@@ -190,12 +214,12 @@ public sealed class Plugin : BasePlugin
 		Upscale = ((BasePlugin)this).Config.Bind<bool>("DLSS", "Upscale", true, "Run DLSS: anti-aliasing at DLAA, and below it a smaller frame reconstructed to the size of the screen.");
 		Quality = ((BasePlugin)this).Config.Bind<int>("DLSS", "Quality", 5, "0 Performance, 1 Balanced, 2 Quality, 3 Ultra Performance, 4 Ultra Quality, 5 DLAA (the size of the screen: no upscaling), 6 Custom (RenderScale).");
 		Preset = ((BasePlugin)this).Config.Bind<int>("DLSS", "Preset", 13, "The DLSS model preset: 0 by the quality (K, with M for Performance and Ultra Performance); 11 K, 13 M; the older, lighter models for RTX 20 and 30 cards: 5 E, 6 F. Preset L is not offered: it crashes the driver in this game.");
-		TransparentMotionVec = ((BasePlugin)this).Config.Bind<bool>("DLSS", "TransparentMotionVectors", true, "Make the game's skin, brows, scalp cap and other transparent-queue materials write motion vectors while the plugin runs (they write none, and DLSS then smears what lies under them). Off: as the game has them.");
-		RenderScale = ((BasePlugin)this).Config.Bind<float>("DLSS", "RenderScale", 0.75f, "Quality 'Custom': the frame is rendered at this share of the screen's size (0.33 to 1), whatever the presets say. Held to the range DLSS takes (Quality mode 0.5 to 1, below it Ultra Performance).");
-		NativeUltraQuality = ((BasePlugin)this).Config.Bind<bool>("DLSS", "NativeUltraQuality", false, "Ultra Quality as DLSS's own Ultra Quality mode. Off (the default): DLSS's Quality mode fed a larger frame (UltraQualityScale), which made the skin blotchy.");
 		UltraQualityScale = ((BasePlugin)this).Config.Bind<float>("DLSS", "UltraQualityScale", 0.77f, "Ultra Quality: how much of the screen's size the frame is rendered at each way, 0.67 (the same as Quality) to 1.");
 		Sharpness = ((BasePlugin)this).Config.Bind<float>("DLSS", "Sharpen", 0.3f, "Sharpening of what is shown (an unsharp mask after everything else), 0 to 1.");
 		AutoExposure = ((BasePlugin)this).Config.Bind<bool>("DLSS", "AutoExposure", true, "Let DLSS work out the exposure itself.");
+		RenderScale = ((BasePlugin)this).Config.Bind<float>("DLSS", "RenderScale", 0.75f, "Quality 'Custom': the frame is rendered at this share of the screen's size (0.33 to 1), whatever the presets say. Held to the range DLSS takes (Quality mode 0.5 to 1, below it Ultra Performance).");
+		HairOwnMotion = ((BasePlugin)this).Config.Bind<bool>("DLSS", "HairOwnMotion", true, "Strand hair (the game's GPU hair, HDRP/Hair shaders) writes its own motion vectors, so DLSS, neural rendering and frame generation see it move with the head; with only the camera's, hair trailed behind a turning head. Off: the camera's motion only, as the plugin did before (for hair whose own motion vectors come out wrong: streaks or shimmer in it).");
+		HairTransparentMotion = ((BasePlugin)this).Config.Bind<bool>("DLSS", "HairTransparentMotion", true, "The see-through parts of strand hair (its soft edges, drawn transparent) write motion vectors too: HDRP's 'transparent writes motion vectors' on the hair's transparent materials and on the camera. Without it they take the motion of what lies behind them, and with the camera moving that differs, so the hair's edges trailed. Works only if the game's hair shader was built with it; the DLSS tab shows what the hair's materials have.");
 		MipBias = ((BasePlugin)this).Config.Bind<bool>("DLSS", "SharperTextures", true, "While the frame is rendered smaller, read textures as sharp as for the size of the screen (a negative mip bias on the camera, by NVIDIA's rule).");
 		Jitter = ((BasePlugin)this).Config.Bind<bool>("DLSS", "ProjectionJitter", true, "Give DLSS a jittered frame to reconstruct from (HDRP's own jitter, with its own anti-aliasing pass switched off). Off: DLSS works on what the game's anti-aliasing gives, which is a blur.");
 		JitterInvertX = ((BasePlugin)this).Config.Bind<bool>("DLSS", "JitterNegateX", false, "Negate the X of HDRP's jitter when it is told to DLSS. Off is right in this game (found by trying all four pairs of signs).");
@@ -206,8 +230,14 @@ public sealed class Plugin : BasePlugin
 		FgMultiplier = ((BasePlugin)this).Config.Bind<int>("FrameGen", "Multiplier", 2, "Frames shown for each rendered one: 2 shows one made frame between rendered ones, 3 two, 4 three (up to what the driver or the bridge mod allows). A 60 Hz monitor shows at most 60 frames a second, so more than 2 only lowers the rendered frames there; it is for 120 Hz and faster monitors.");
 		FgInvertMotionX = ((BasePlugin)this).Config.Bind<bool>("FrameGen", "InvertMotionX", true, "Negate the motion vectors' X for frame generation.");
 		FgInvertMotionY = ((BasePlugin)this).Config.Bind<bool>("FrameGen", "InvertMotionY", true, "Negate the motion vectors' Y for frame generation (on: it reads the buffers as they are, not turned upside down).");
+		FgResetOnCuts = ((BasePlugin)this).Config.Bind<bool>("FrameGen", "ResetOnCuts", true, "When the camera jumps to another shot (a cut in a conversation, another camera, a new scene), frame generation, DLSS and neural rendering start afresh for that frame: no made frame mixes the two shots, and DLSS keeps no trail of the old one. A jump is a move or turn far beyond the camera's own pace of late, so a fast pan is not taken for one.");
+		FgFrameCap = ((BasePlugin)this).Config.Bind<bool>("FrameGen", "EvenRenderedFrames", true, "While frame generation is on, have Reflex hold the rendered frames to the monitor's refresh divided by the multiplier (30 a second at 60 Hz and x2), evenly spaced, so that each made frame falls halfway between two rendered ones. Only with the game's VSync on: with it off the frames go out as fast as they are made (more than the refresh, with tearing) and are not held.");
+		FgPacingFloor = ((BasePlugin)this).Config.Bind<int>("FrameGen", "PacingFloor", 10, "The fewest rendered frames a second at which the made frames are still spaced between the rendered ones. Below it the bridge sends each made frame out right before the rendered one, and with VSync off it is then on the screen for a moment only: the counter goes up, the motion is no smoother. The bridge's own is 30, which an RTX 3060 with neural rendering hardly reaches; 10 to 30.");
+		FgMotionUnits = ((BasePlugin)this).Config.Bind<int>("FrameGen", "MotionUnits", 0, "How the motion vectors are scaled for DLSS-G. 0: as a fraction of the screen, the way NVIDIA's Streamline hands them to DLSS-G (HDRP keeps them so already). 1: in pixels, as DLSS upscaling wants them, which is how the plugin gave them before 0.8.8 (then DLSS-G saw motion some thousand times too large).");
+		FgOwnPresenter = ((BasePlugin)this).Config.Bind<bool>("FrameGen", "OwnPresenter", true, "Show frame generation's frames through the plugin's own presenter (CMAPresenter.dll): a window of its own laid over the game's picture, on a D3D11 device of its own, which shows each frame once the GPU has finished it and spaces them evenly, with tearing, without holding the game back. Only with the game's VSync off: with VSync on the bridge shows the frames, each on a refresh of its own (Unity then takes a frame's time from the screen's refreshes, and with the presenter the game's world ran too slowly). Off: the bridge shows the frames always, as before 0.9.0.");
 		Reflex = ((BasePlugin)this).Config.Bind<bool>("Latency", "Reflex", true, "NVIDIA Reflex low latency mode for the game's device, through the driver.");
 		ReflexBoost = ((BasePlugin)this).Config.Bind<bool>("Latency", "ReflexBoost", false, "Reflex with boost: the GPU is kept from slowing its clock, for a little less delay at more power.");
+		ShortQueue = ((BasePlugin)this).Config.Bind<bool>("Latency", "ShortQueue", true, "Let the game queue at most one frame for the GPU (Unity's maxQueuedFrames 1 instead of the game's own, 2): each frame reaches the screen a frame sooner, which the mouse feels. Frames were seen finished on the GPU some 45 ms after the game handed them over. The GPU may idle a little between frames. Only while the game's VSync is off: with VSync the frame rate fell and the camera lagged behind the mouse with it.");
 		Mask = ((BasePlugin)this).Config.Bind<bool>("Mask", "Enabled", false, "Tell the network where skin, hair and clothing are (a mask drawn from the characters' meshes), and set how much of itself it is on each.");
 		MaskSoft = ((BasePlugin)this).Config.Bind<bool>("Mask", "Soft", true, "Soften the mask so that regions fade into one another.");
 		for (int i = 0; i < 4; i++)
@@ -228,11 +258,16 @@ public sealed class Plugin : BasePlugin
 		GameContactShadows = ((BasePlugin)this).Config.Bind<bool>("GameEffects", "ContactShadows", true, "Leave the game's contact shadows as they are.");
 		GameVolumetricFog = ((BasePlugin)this).Config.Bind<bool>("GameEffects", "VolumetricFog", true, "Leave the game's volumetric fog and light shafts as they are.");
 		GameVolumetricClouds = ((BasePlugin)this).Config.Bind<bool>("GameEffects", "VolumetricClouds", true, "Leave the game's volumetric clouds as they are.");
+		FluidSemen = ((BasePlugin)this).Config.Bind<bool>("Fluids", "GpuSemen", true, "Leave the game's semen on the GPU as the game has it (false: switched off, the game's older semen is used). New shots only; what is already there stays.");
+		FluidSquirt = ((BasePlugin)this).Config.Bind<bool>("Fluids", "GpuSquirt", true, "Leave the game's squirt on the GPU as the game has it (false: switched off). New squirts only.");
+		FluidSim = ((BasePlugin)this).Config.Bind<bool>("Fluids", "FluidSimulation", true, "Leave the game's simulated fluid on the GPU (SPH; saliva and her fluid run on it) as the game has it (false: switched off).");
+		FluidDrool = ((BasePlugin)this).Config.Bind<bool>("Fluids", "Saliva", true, "Leave the game's saliva during oral as the game has it (false: switched off).");
+		FluidVag = ((BasePlugin)this).Config.Bind<bool>("Fluids", "HerFluid", true, "Leave the game's vaginal fluid as the game has it (false: switched off).");
 		FlipY = ((BasePlugin)this).Config.Bind<bool>("Orientation", "FlipY", true, "Hand every texture over upside down, and turn the result back: the way up the network and DLSS expect.");
 		InvertMotionX = ((BasePlugin)this).Config.Bind<bool>("Orientation", "InvertMotionX", true, "Negate the motion vectors' X (the game stores current minus previous, NGX wants previous minus current).");
 		InvertMotionY = ((BasePlugin)this).Config.Bind<bool>("Orientation", "InvertMotionY", false, "Negate the motion vectors' Y. Off while FlipY is on (the flip does it already).");
 		DepthInverted = ((BasePlugin)this).Config.Bind<bool>("Orientation", "DepthInverted", SystemInfo.usesReversedZBuffer, "The depth that is handed over is reversed (near 1, far 0).");
-		FastNetwork = ((BasePlugin)this).Config.Bind<bool>("Bridge", "FastNetwork", true, "Run neural rendering on the FP16 rebuild of the network that the nvidia mfg bridge mod (a proxy DLL beside the game) hands over: the same picture, faster. Kept in the mod's dlssg_to_fsr3.ini as EnableDlssNr, which the mod reads when the game starts.");
+		FastNetwork = ((BasePlugin)this).Config.Bind<bool>("Bridge", "FastNetwork", true, "Run neural rendering on the FP16 rebuild of the network that the nvidia mfg bridge mod (a proxy DLL beside the game) hands over: the same picture, faster. Kept in the mod's dlssg_to_fsr3.ini as EnableDlssNr, which the mod reads when the game starts. For RTX 20 and 30 only: on RTX 40 and 50 (FP8 in hardware) the rebuild does not start, so EnableDlssNr is kept at 0 there and NVIDIA's own network runs, whatever this says.");
 		StartDlss = ((BasePlugin)this).Config.Bind<bool>("Startup", "Dlss", true, "Switch DLSS on as the game starts, whatever it was left at.");
 		StartNeural = ((BasePlugin)this).Config.Bind<bool>("Startup", "NeuralRendering", true, "Switch neural rendering on as the game starts, whatever it was left at.");
 		StartFrameGen = ((BasePlugin)this).Config.Bind<bool>("Startup", "FrameGeneration", true, "Switch frame generation on as the game starts, whatever it was left at.");
@@ -253,6 +288,7 @@ public sealed class Plugin : BasePlugin
 		HalfResMask = ((BasePlugin)this).Config.Bind<bool>("Optimization", "HalfResMask", true, "With the mask's Soft on, draw the mask at half the frame's width and height. It is made a third of the size and spread out again afterwards anyway, so it looks the same; the characters' meshes are drawn several times for it every frame.");
 		FastMaskScan = ((BasePlugin)this).Config.Bind<bool>("Optimization", "FastMaskScan", true, "When the mask looks for the characters (every 3 s), look at each renderer once and remember what its parts are (skin, hair or clothing), instead of reading every renderer's names and materials again; everything is looked at afresh every 30 s.");
 		FastBuffers = ((BasePlugin)this).Config.Bind<bool>("Optimization", "FastBuffers", true, "With frame generation off, take the motion vectors and the depth out of HDRP's texture arrays in one copy instead of two. The one copy is checked once against the two; if it does not give the same, the two stay. With frame generation on the two stay anyway (DLSS-G takes the first).");
+		UseShadowCache = ((BasePlugin)this).Config.Bind<bool>("Optimization", "ShadowCache", false, "Shadow cache (faster, but can leave stale shadows): spot and point lights remember the shadows of objects that have not moved for a while and redraw only what moves, which saves GPU time. Known problem: a shadow can stay where something has moved away (seen with her hair). Off (the default): every shadow is drawn every frame, as in the game.");
 		StaticShadowsAtlas = ((BasePlugin)this).Config.Bind<int>("Optimization", "StaticShadowsAtlas", 8192, "The size of HDRP's atlas for kept shadows (spot and point lights keep the shadows of what does not move, and draw only what moves every frame), set as the game starts; 0 leaves the game's. The game has 4096, in which not even one point light at 2048 a side (6 x 2048 x 2048) fits. 8192 takes 128-256 MB of video memory.");
 		ShadowCache.Prepare(StaticShadowsAtlas.Value);
 		Bridge.Start(FastNetwork.Value);
@@ -265,12 +301,13 @@ public sealed class Plugin : BasePlugin
 			{
 				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("CMA DLSS NR");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(" ");
-				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.8.3");
+				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.9.15");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(": the native half is not there; nothing is run.");
 			}
 			log.LogError(val);
 			return;
 		}
+		Fluids.Init();
 		((BasePlugin)this).AddComponent<Capture>();
 		_ = ((BasePlugin)this).Log;
 		BepInExInfoLogInterpolatedStringHandler val2 = new BepInExInfoLogInterpolatedStringHandler(82, 6, out flag);
@@ -278,7 +315,7 @@ public sealed class Plugin : BasePlugin
 		{
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("CMA DLSS NR");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" ");
-			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.8.3");
+			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.9.15");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" loaded: neural rendering ");
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>(Enabled.Value ? "on" : "off");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(", DLSS ");

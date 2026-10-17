@@ -5061,7 +5061,7 @@ public sealed class Capture : MonoBehaviour
 		float num4 = num2 + 16f;
 		float num5 = 398f;
 		float num6 = num3 + 10f;
-		GUI.Label(new Rect(num4, num6, num5, 30f), "DLSS / Neural Rendering  0.9.15", m_stTitle);
+		GUI.Label(new Rect(num4, num6, num5, 30f), "DLSS / Neural Rendering  0.9.16", m_stTitle);
 		num6 += 32f;
 		bool flag = m_srOpen && !m_srFailed;
 		bool flag2 = m_view >= 0 && m_initialised;

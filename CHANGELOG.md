@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.16
+
+### Changed
+- **NVIDIA libraries updated to 310.9.16** (`nvngx_dlss.dll`, `nvngx_dlssg.dll`, `nvngx_dlssnr.dll`). The neural rendering library is the build for RTX 40, 30 and 20 (the RTX 50 build is a separate file; swap it into `ngx\` on RTX 50 if wanted).
+
 ## 0.9.15
 
 ### Fixed

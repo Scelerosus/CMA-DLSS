@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace CMADlssNr;
 
-[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.9.16")]
+[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.1.15")]
 [BepInProcess("Corrupted Modeling Agency.exe")]
 public sealed class Plugin : BasePlugin
 {
@@ -18,7 +18,7 @@ public sealed class Plugin : BasePlugin
 
 	public const string PluginName = "CMA DLSS NR";
 
-	public const string PluginVersion = "0.9.16";
+	public const string PluginVersion = "0.1.15";
 
 	internal static ManualLogSource ModLog;
 
@@ -305,7 +305,7 @@ public sealed class Plugin : BasePlugin
 			{
 				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("CMA DLSS NR");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(" ");
-				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.9.16");
+				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.1.15");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(": the native half is not there; nothing is run.");
 			}
 			log.LogError(val);
@@ -319,7 +319,7 @@ public sealed class Plugin : BasePlugin
 		{
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("CMA DLSS NR");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" ");
-			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.9.16");
+			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.1.15");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" loaded: neural rendering ");
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>(Enabled.Value ? "on" : "off");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(", DLSS ");

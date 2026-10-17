@@ -1,10 +1,10 @@
-# CMA DLSS NR 0.9.15
+# CMA DLSS NR 0.9.16
 
 NVIDIA DLSS, DLSS neural rendering and DLSS frame generation for *Corrupted Modeling Agency* (tested with 0.67).
 
 ## What it does
 
-- **DLSS** - sharp anti-aliasing at full resolution (DLAA), or a smaller frame reconstructed to your screen for more frames a second (Ultra Quality, Quality, Balanced, Performance, Ultra Performance). **Custom** takes the frame's size from a slider (a share of the screen's, 0.33 to 1), whatever the presets say. A sharpness slider and the model presets K, M, L, E and F.
+- **DLSS** - sharp anti-aliasing at full resolution (DLAA), or a smaller frame reconstructed to your screen for more frames a second (Quality, Balanced, Performance, Ultra Performance). DLSS's own sizes only: at any other the skin comes out soft, so there is no Ultra Quality and no free size slider. A sharpness slider and the model presets K, M, L, E and F.
 - **Neural rendering** - NVIDIA's network relights and refines the picture. It can run before DLSS (faster) or after it (finer).
 - **Mask** - separate neural rendering strength and detail for the scene, skin, hair and clothing.
 - **Frame generation** - generated frames between the rendered ones (x2 and more where the card allows it), with NVIDIA Reflex to keep the controls responsive.
@@ -22,7 +22,7 @@ It does not work on AMD or Intel graphics cards.
 
 ## Install
 
-The archive has two folders. Close the game first.
+The archive has three folders (the third only for RTX 20 and 30 cards). Close the game first.
 
 **Step 1 - BepInEx (the mod loader).** Skip this step if the game already has a `BepInEx` folder and other BepInEx mods work.
 
@@ -46,12 +46,13 @@ BepInEx\
     CMADlssNr\
       CMADlssNr.dll
       nvngx.dll\DlssBridge.dll
+      nvngx.dll\CMAPresenter.dll
       ngx\nvngx_dlss.dll
       ngx\nvngx_dlssg.dll
       ngx\nvngx_dlssnr.dll
 ```
 
-**Step 3 (RTX 20 and 30 only) - the bridge mod.** Copy `version.dll` and `dlssg_to_fsr3.ini` of the *nvidia mfg bridge* mod beside `Corrupted Modeling Agency.exe`. The plugin keeps its `EnableDlssNr` switch in that ini; it is asked for on RTX 20 and 30 only (on newer cards the bridge's FP16 network cannot start and is left off).
+**Step 3 (RTX 20 and 30 only) - the bridge mod.** Open the folder `3 - Bridge (RTX 20 and 30)` and copy `version.dll` and `dlssg_to_fsr3.ini` of the *nvidia mfg bridge* mod beside `Corrupted Modeling Agency.exe`. Skip this step on RTX 40 and 50. The plugin keeps its `EnableDlssNr` switch in that ini; it is asked for on RTX 20 and 30 only (on newer cards the bridge's FP16 network cannot start and is left off).
 
 **Step 4.** Start the game. The very first start after installing BepInEx takes a few minutes and needs an internet connection: BepInEx prepares itself for the game. A console window may stay open during that time. Later starts are as fast as usual.
 
@@ -63,7 +64,7 @@ The window has six pages:
 
 | Page | What is there |
 |---|---|
-| DLSS | On/off, quality (with **Custom** and its Render scale slider), sharpness, model preset (Auto, K, M, L, E, F), the hair's motion vectors |
+| DLSS | On/off, quality, sharpness, model preset (Auto, K, M, L, E, F), the hair's motion vectors |
 | Neural | On/off, before or after DLSS, intensity, local tone, local structure, style, passes |
 | Mask | Separate strength and detail for scene, skin, hair and clothing |
 | Frame Gen | Frame generation, multiplier, frame pacing, Reflex |
@@ -74,7 +75,7 @@ Out of the box: DLSS at DLAA with preset M, neural rendering on (before DLSS), s
 
 ## Model presets
 
-- **K** - sharp and steady. **M** - faster. **Auto** takes K, and M for Performance and Ultra Performance.
+- **K** - steady, but it keeps old history longest, so the skin can go soft. **M** - sharper; **Auto** takes M (with neural rendering after DLSS by default, which keeps M's edges steady).
 - **L** - NVIDIA's newest model, made for Ultra Performance; heavier than K and M.
 - **E** and **F** - the older, much lighter models for RTX 20 and 30 cards: E for upscaling, F for DLAA and Ultra Performance.
 
@@ -82,7 +83,7 @@ Changing the preset closes DLSS and opens it again; with frame generation on, th
 
 ## Tips
 
-- **Too slow?** Lower the DLSS quality (Quality or Balanced), or use **Custom** and drag the Render scale slider; or switch neural rendering off - it is the heaviest part.
+- **Too slow?** Lower the DLSS quality (Quality or Balanced), or switch neural rendering off - it is the heaviest part.
 - **RTX 20 or 30 card?** Pick model preset **E** (or **F** at DLAA and Ultra Performance). For neural rendering install the bridge mod; the Bridge page then has an "FP16 network" switch, which applies at the next start of the game.
 - **A shadow stays where something has moved away?** Keep the **Shadow cache** off (the default). It is a speed-up on the Bridge page: spot and point lights remember the shadows of what has not moved; with it on, a shadow of her hair could stay in the air.
 - **Glow or a halo round bright skin?** That is the game's bloom. Switch it off on the Game page.

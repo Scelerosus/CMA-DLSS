@@ -14,6 +14,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="release\**" />
+    <Compile Remove="native\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="$(GameDir)\BepInEx\core\BepInEx.Core.dll" Private="false" />
     <Reference Include="$(GameDir)\BepInEx\core\BepInEx.Unity.IL2CPP.dll" Private="false" />
     <Reference Include="$(GameDir)\BepInEx\core\BepInEx.Unity.Common.dll" Private="false" />

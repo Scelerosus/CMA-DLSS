@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace CMADlssNr;
 
-[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.9.15")]
+[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.9.16")]
 [BepInProcess("Corrupted Modeling Agency.exe")]
 public sealed class Plugin : BasePlugin
 {
@@ -18,7 +18,7 @@ public sealed class Plugin : BasePlugin
 
 	public const string PluginName = "CMA DLSS NR";
 
-	public const string PluginVersion = "0.9.15";
+	public const string PluginVersion = "0.9.16";
 
 	internal static ManualLogSource ModLog;
 
@@ -34,7 +34,7 @@ public sealed class Plugin : BasePlugin
 
 	internal static ConfigEntry<bool> HairOwnMotion;
 
-	internal static ConfigEntry<float> RenderScale;
+	internal static ConfigEntry<bool> TransparentMotionVec;
 
 	internal static ConfigEntry<bool> HairTransparentMotion;
 
@@ -201,7 +201,7 @@ public sealed class Plugin : BasePlugin
 		Cfg = ((BasePlugin)this).Config;
 		((BasePlugin)this).Config.SaveOnConfigSet = false;
 		Enabled = ((BasePlugin)this).Config.Bind<bool>("General", "Enabled", true, "Run neural rendering (independent of DLSS: either runs without the other).");
-		NrAfter = ((BasePlugin)this).Config.Bind<bool>("General", "NeuralAfterDlss", false, "Run neural rendering after DLSS, on the full-size picture, instead of before it on the small frame: finer, and as costly as at DLAA.");
+		NrAfter = ((BasePlugin)this).Config.Bind<bool>("General", "NeuralAfterDlss", true, "Run neural rendering after DLSS, on the full-size picture, instead of before it on the small frame: finer, and as costly as at DLAA.");
 		Intensity = ((BasePlugin)this).Config.Bind<float>("General", "Intensity", 1f, "How much of the network's result is shown, 0 to 1.");
 		Style = ((BasePlugin)this).Config.Bind<int>("General", "Style", 0, "0 Default, 1 Natural, 2 Cinematic.");
 		Passes = ((BasePlugin)this).Config.Bind<int>("General", "Passes", 1, "How many times the network is run over the frame, 1 to 3 (each pass costs its whole time and memory again).");
@@ -212,12 +212,16 @@ public sealed class Plugin : BasePlugin
 		ToggleKey = ((BasePlugin)this).Config.Bind<KeyCode>("Keys", "Toggle", (KeyCode)0, "Key that switches neural rendering on and off (none by default: it is in the window).");
 		QualityKey = ((BasePlugin)this).Config.Bind<KeyCode>("Keys", "Quality", (KeyCode)0, "Key that goes through the DLSS qualities: DLAA, Quality, Balanced, Performance, Ultra Performance (none by default).");
 		Upscale = ((BasePlugin)this).Config.Bind<bool>("DLSS", "Upscale", true, "Run DLSS: anti-aliasing at DLAA, and below it a smaller frame reconstructed to the size of the screen.");
-		Quality = ((BasePlugin)this).Config.Bind<int>("DLSS", "Quality", 5, "0 Performance, 1 Balanced, 2 Quality, 3 Ultra Performance, 4 Ultra Quality, 5 DLAA (the size of the screen: no upscaling), 6 Custom (RenderScale).");
+		Quality = ((BasePlugin)this).Config.Bind<int>("DLSS", "Quality", 5, "0 Performance, 1 Balanced, 2 Quality, 3 Ultra Performance, 4 Ultra Quality (left out: it makes the skin soft; it runs as Quality), 5 DLAA (the size of the screen: no upscaling).");
+		if (Quality.Value == 4 || Quality.Value == 6)
+		{
+			Quality.Value = 2;
+		}
 		Preset = ((BasePlugin)this).Config.Bind<int>("DLSS", "Preset", 13, "The DLSS model preset: 0 by the quality (K, with M for Performance and Ultra Performance); 11 K, 13 M; the older, lighter models for RTX 20 and 30 cards: 5 E, 6 F. Preset L is not offered: it crashes the driver in this game.");
 		UltraQualityScale = ((BasePlugin)this).Config.Bind<float>("DLSS", "UltraQualityScale", 0.77f, "Ultra Quality: how much of the screen's size the frame is rendered at each way, 0.67 (the same as Quality) to 1.");
 		Sharpness = ((BasePlugin)this).Config.Bind<float>("DLSS", "Sharpen", 0.3f, "Sharpening of what is shown (an unsharp mask after everything else), 0 to 1.");
 		AutoExposure = ((BasePlugin)this).Config.Bind<bool>("DLSS", "AutoExposure", true, "Let DLSS work out the exposure itself.");
-		RenderScale = ((BasePlugin)this).Config.Bind<float>("DLSS", "RenderScale", 0.75f, "Quality 'Custom': the frame is rendered at this share of the screen's size (0.33 to 1), whatever the presets say. Held to the range DLSS takes (Quality mode 0.5 to 1, below it Ultra Performance).");
+		TransparentMotionVec = ((BasePlugin)this).Config.Bind<bool>("DLSS", "TransparentMotionVectors", true, "Make the game's skin, brows, scalp cap and other transparent-queue materials write motion vectors while the plugin runs (they write none, and DLSS then keeps old history on them: soft, streaky skin, most with preset K). Off: as the game has them.");
 		HairOwnMotion = ((BasePlugin)this).Config.Bind<bool>("DLSS", "HairOwnMotion", true, "Strand hair (the game's GPU hair, HDRP/Hair shaders) writes its own motion vectors, so DLSS, neural rendering and frame generation see it move with the head; with only the camera's, hair trailed behind a turning head. Off: the camera's motion only, as the plugin did before (for hair whose own motion vectors come out wrong: streaks or shimmer in it).");
 		HairTransparentMotion = ((BasePlugin)this).Config.Bind<bool>("DLSS", "HairTransparentMotion", true, "The see-through parts of strand hair (its soft edges, drawn transparent) write motion vectors too: HDRP's 'transparent writes motion vectors' on the hair's transparent materials and on the camera. Without it they take the motion of what lies behind them, and with the camera moving that differs, so the hair's edges trailed. Works only if the game's hair shader was built with it; the DLSS tab shows what the hair's materials have.");
 		MipBias = ((BasePlugin)this).Config.Bind<bool>("DLSS", "SharperTextures", true, "While the frame is rendered smaller, read textures as sharp as for the size of the screen (a negative mip bias on the camera, by NVIDIA's rule).");
@@ -301,7 +305,7 @@ public sealed class Plugin : BasePlugin
 			{
 				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("CMA DLSS NR");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(" ");
-				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.9.15");
+				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.9.16");
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(": the native half is not there; nothing is run.");
 			}
 			log.LogError(val);
@@ -315,7 +319,7 @@ public sealed class Plugin : BasePlugin
 		{
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("CMA DLSS NR");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" ");
-			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.9.15");
+			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.9.16");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" loaded: neural rendering ");
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>(Enabled.Value ? "on" : "off");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(", DLSS ");

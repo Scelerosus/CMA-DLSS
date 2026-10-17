@@ -53,10 +53,6 @@ internal sealed class ShadowCache
 		public bool placed;
 	}
 
-	private const float StillFor = 10f;
-
-	private const float BatchedStillFor = 1f;
-
 	private readonly Dictionary<IntPtr, Held> m_held = new Dictionary<IntPtr, Held>();
 
 	private readonly List<Held> m_list = new List<Held>();
@@ -104,8 +100,6 @@ internal sealed class ShadowCache
 	internal static string AtlasState = "";
 
 	private readonly List<string> m_lightsSeen = new List<string>();
-
-	internal static bool Restarting => s_restart != 0;
 
 	internal static void Prepare(int want)
 	{

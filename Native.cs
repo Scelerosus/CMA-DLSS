@@ -23,10 +23,6 @@ internal static class Native
 
 	internal static bool Loaded;
 
-	private const int FloorRva = 212344;
-
-	private const int FloorLoadRva = 18267;
-
 	private static readonly byte[] s_floorLoad = new byte[8] { 242, 15, 16, 53, 21, 246, 2, 0 };
 
 	private static double s_floorWritten = 30.0;
@@ -150,9 +146,6 @@ internal static class Native
 
 	[DllImport("DlssBridge")]
 	internal static extern void vdn_view_close(int view);
-
-	[DllImport("DlssBridge")]
-	internal static extern void vdn_shutdown();
 
 	[DllImport("DlssBridge")]
 	internal static extern int vdn_set_textures(int view, IntPtr color, IntPtr mvec, IntPtr depth, IntPtr output, IntPtr mask, uint srcW, uint srcH, uint baseX, uint baseY);

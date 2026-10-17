@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace CMADlssNr;
 
-[BepInPlugin("community.cma.dlssnr", "CMA DLSS NR", "0.9.16")]
+[BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInProcess("Corrupted Modeling Agency.exe")]
 public sealed class Plugin : BasePlugin
 {
@@ -18,7 +18,7 @@ public sealed class Plugin : BasePlugin
 
 	public const string PluginName = "CMA DLSS NR";
 
-	public const string PluginVersion = "0.9.16";
+	public const string PluginVersion = "0.1.15";
 
 	internal static ManualLogSource ModLog;
 
@@ -35,6 +35,8 @@ public sealed class Plugin : BasePlugin
 	internal static ConfigEntry<bool> HairOwnMotion;
 
 	internal static ConfigEntry<bool> TransparentMotionVec;
+
+	internal static ConfigEntry<bool> ScalpDepth;
 
 	internal static ConfigEntry<bool> HairTransparentMotion;
 
@@ -221,6 +223,7 @@ public sealed class Plugin : BasePlugin
 		UltraQualityScale = ((BasePlugin)this).Config.Bind<float>("DLSS", "UltraQualityScale", 0.77f, "Ultra Quality: how much of the screen's size the frame is rendered at each way, 0.67 (the same as Quality) to 1.");
 		Sharpness = ((BasePlugin)this).Config.Bind<float>("DLSS", "Sharpen", 0.3f, "Sharpening of what is shown (an unsharp mask after everything else), 0 to 1.");
 		AutoExposure = ((BasePlugin)this).Config.Bind<bool>("DLSS", "AutoExposure", true, "Let DLSS work out the exposure itself.");
+		ScalpDepth = ((BasePlugin)this).Config.Bind<bool>("DLSS", "ScalpDepth", true, "The scalp cap (the see-through layer of hair roots on the forehead) writes depth while the plugin runs (ZWrite and the depth prepass), so DLSS does not keep old history on the skin under it (dark stripes on the forehead with preset K). Off: as the game has it. May change how the hairline looks; if it does, switch it off.");
 		TransparentMotionVec = ((BasePlugin)this).Config.Bind<bool>("DLSS", "TransparentMotionVectors", true, "Make the game's skin, brows, scalp cap and other transparent-queue materials write motion vectors while the plugin runs (they write none, and DLSS then keeps old history on them: soft, streaky skin, most with preset K). Off: as the game has them.");
 		HairOwnMotion = ((BasePlugin)this).Config.Bind<bool>("DLSS", "HairOwnMotion", true, "Strand hair (the game's GPU hair, HDRP/Hair shaders) writes its own motion vectors, so DLSS, neural rendering and frame generation see it move with the head; with only the camera's, hair trailed behind a turning head. Off: the camera's motion only, as the plugin did before (for hair whose own motion vectors come out wrong: streaks or shimmer in it).");
 		HairTransparentMotion = ((BasePlugin)this).Config.Bind<bool>("DLSS", "HairTransparentMotion", true, "The see-through parts of strand hair (its soft edges, drawn transparent) write motion vectors too: HDRP's 'transparent writes motion vectors' on the hair's transparent materials and on the camera. Without it they take the motion of what lies behind them, and with the camera moving that differs, so the hair's edges trailed. Works only if the game's hair shader was built with it; the DLSS tab shows what the hair's materials have.");
@@ -303,9 +306,9 @@ public sealed class Plugin : BasePlugin
 			BepInExErrorLogInterpolatedStringHandler val = new BepInExErrorLogInterpolatedStringHandler(48, 2, out flag);
 			if (flag)
 			{
-				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("CMA DLSS NR");
+				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(PluginName);
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(" ");
-				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>("0.9.16");
+				((BepInExLogInterpolatedStringHandler)val).AppendFormatted<string>(PluginVersion);
 				((BepInExLogInterpolatedStringHandler)val).AppendLiteral(": the native half is not there; nothing is run.");
 			}
 			log.LogError(val);
@@ -317,9 +320,9 @@ public sealed class Plugin : BasePlugin
 		BepInExInfoLogInterpolatedStringHandler val2 = new BepInExInfoLogInterpolatedStringHandler(82, 6, out flag);
 		if (flag)
 		{
-			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("CMA DLSS NR");
+			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>(PluginName);
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" ");
-			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>("0.9.16");
+			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>(PluginVersion);
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(" loaded: neural rendering ");
 			((BepInExLogInterpolatedStringHandler)val2).AppendFormatted<string>(Enabled.Value ? "on" : "off");
 			((BepInExLogInterpolatedStringHandler)val2).AppendLiteral(", DLSS ");

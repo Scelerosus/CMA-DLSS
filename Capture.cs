@@ -350,27 +350,9 @@ public sealed class Capture : MonoBehaviour
 
 	private const ulong AntialiasingBit = 134217728uL;
 
-	private const ulong MotionBits = 3072uL;
-
 	private static readonly ulong s_transMotionBit = 65536uL;
 
 	private ulong m_onBits1 = 3072uL;
-
-	private const ulong SssBit = 70368744177664uL;
-
-	private const ulong DofBit = 131072uL;
-
-	private const ulong BlurBit = 262144uL;
-
-	private const ulong BloomBit = 1048576uL;
-
-	private const ulong ChromaBit = 4194304uL;
-
-	private const ulong VignetteBit = 8388608uL;
-
-	private const ulong GrainBit = 33554432uL;
-
-	private const ulong EffectBits2 = 47579136uL;
 
 	private ulong m_fxOff1;
 
@@ -433,8 +415,6 @@ public sealed class Capture : MonoBehaviour
 	private bool m_pointerReset;
 
 	private Rect m_menuOnScreen;
-
-	internal const int Regions = 4;
 
 	internal static readonly string[] RegionNames = new string[4] { "Scene", "Skin", "Hair", "Clothing" };
 
@@ -2608,7 +2588,7 @@ public sealed class Capture : MonoBehaviour
 			else
 			{
 				double num2 = Native.vdn_fg_unpaced_hz();
-				string? text;
+				string text;
 				if (Plugin.FgPacing.Value)
 				{
 					text = ((num2 > 0.0 && num2 < m_fgFloor) ? $"off (below {m_fgFloor:F0}/s)" : $"on (from {m_fgFloor:F0}/s)");
@@ -3262,7 +3242,7 @@ public sealed class Capture : MonoBehaviour
 		FrameSettings renderingPathCustomFrameSettings = jitHd.m_RenderingPathCustomFrameSettings;
 		bool customRenderingSettings = jitHd.customRenderingSettings;
 		ulong num = m_onBits1 | m_fxOff1;
-		ulong num2 = (ulong)(m_jitJitter ? 134217728 : 0) | m_fxOff2;
+		ulong num2 = (m_jitJitter ? AntialiasingBit : 0uL) | m_fxOff2;
 		ulong num3 = num & ~renderingPathCustomFrameSettingsOverrideMask.mask.data1;
 		ulong num4 = num2 & ~renderingPathCustomFrameSettingsOverrideMask.mask.data2;
 		ulong num5 = num & (renderingPathCustomFrameSettings.bitDatas.data1 ^ m_onBits1);
@@ -3377,7 +3357,7 @@ public sealed class Capture : MonoBehaviour
 				renderingPathCustomFrameSettings.bitDatas.data1 |= m_onBits1;
 				if (jitter)
 				{
-					renderingPathCustomFrameSettingsOverrideMask.mask.data2 |= 134217728uL;
+					renderingPathCustomFrameSettingsOverrideMask.mask.data2 |= AntialiasingBit;
 					renderingPathCustomFrameSettings.bitDatas.data2 &= 18446744073575333887uL;
 				}
 				m_fxOff1 = off;
@@ -5061,7 +5041,7 @@ public sealed class Capture : MonoBehaviour
 		float num4 = num2 + 16f;
 		float num5 = 398f;
 		float num6 = num3 + 10f;
-		GUI.Label(new Rect(num4, num6, num5, 30f), "DLSS / Neural Rendering  0.1.15", m_stTitle);
+		GUI.Label(new Rect(num4, num6, num5, 30f), "DLSS / Neural Rendering  " + Plugin.PluginVersion, m_stTitle);
 		num6 += 32f;
 		bool flag = m_srOpen && !m_srFailed;
 		bool flag2 = m_view >= 0 && m_initialised;
@@ -5259,23 +5239,54 @@ public sealed class Capture : MonoBehaviour
 
 	private readonly HashSet<int> m_transSeen = new HashSet<int>();
 
+	private struct ScalpWas
+	{
+		public Material material;
+
+		public float zwrite;
+
+		public float prepass;
+	}
+
+	private readonly List<ScalpWas> m_scalpDepth = new List<ScalpWas>();
+
 	private void TransparentMotion(Renderer r)
 	{
-		if ((Object)r == (Object)null || !Plugin.TransparentMotionVec.Value || !m_transSeen.Add(((Object)r).GetInstanceID()))
+		if ((Object)r == (Object)null || !m_transSeen.Add(((Object)r).GetInstanceID()))
 		{
 			return;
 		}
 		try
 		{
+			bool flag = Plugin.TransparentMotionVec.Value;
+			bool flag2 = Plugin.ScalpDepth.Value && ((Object)r).name.IndexOf("scalp", StringComparison.OrdinalIgnoreCase) >= 0;
 			Il2CppReferenceArray<Material> sharedMaterials = r.sharedMaterials;
 			for (int i = 0; sharedMaterials != null && i < sharedMaterials.Length; i++)
 			{
 				Material val = sharedMaterials[i];
-				if (!((Object)val == (Object)null) && val.renderQueue >= 2500 && val.renderQueue < 3000 && val.HasProperty("_TransparentWritingMotionVec") && !(val.GetFloat("_TransparentWritingMotionVec") > 0.5f))
+				if ((Object)val == (Object)null || val.renderQueue < 2500 || val.renderQueue >= 3000)
+				{
+					continue;
+				}
+				if (flag && val.HasProperty("_TransparentWritingMotionVec") && !(val.GetFloat("_TransparentWritingMotionVec") > 0.5f))
 				{
 					val.SetFloat("_TransparentWritingMotionVec", 1f);
 					val.EnableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
 					m_transMotion.Add(val);
+				}
+				// The scalp cap (the see-through layer on the forehead) writes no depth: DLSS then takes the skin under
+				// it for the cap and keeps old history there, which shows as dark stripes on the forehead.
+				if (flag2 && val.HasProperty("_ZWrite") && val.HasProperty("_TransparentDepthPrepassEnable") && !(val.GetFloat("_TransparentDepthPrepassEnable") > 0.5f))
+				{
+					m_scalpDepth.Add(new ScalpWas
+					{
+						material = val,
+						zwrite = val.GetFloat("_ZWrite"),
+						prepass = val.GetFloat("_TransparentDepthPrepassEnable")
+					});
+					val.SetFloat("_ZWrite", 1f);
+					val.SetFloat("_TransparentDepthPrepassEnable", 1f);
+					val.SetShaderPassEnabled("TransparentDepthPrepass", true);
 				}
 			}
 		}
@@ -5300,6 +5311,16 @@ public sealed class Capture : MonoBehaviour
 				item.DisableKeyword("_TRANSPARENT_WRITES_MOTION_VEC");
 			}
 		}
+		foreach (ScalpWas item2 in m_scalpDepth)
+		{
+			if ((Object)item2.material != (Object)null)
+			{
+				item2.material.SetFloat("_ZWrite", item2.zwrite);
+				item2.material.SetFloat("_TransparentDepthPrepassEnable", item2.prepass);
+				item2.material.SetShaderPassEnabled("TransparentDepthPrepass", item2.prepass > 0.5f);
+			}
+		}
+		m_scalpDepth.Clear();
 		m_transMotion.Clear();
 		m_transSeen.Clear();
 		m_motionSeen.Clear();

@@ -13,10 +13,6 @@ internal static class Presenter
 
 	internal const int Abi = 1;
 
-	private const uint PresentRva = 315760u;
-
-	private const uint Present1Rva = 315768u;
-
 	private static readonly (int rva, byte[] bytes)[] s_uses = new (int, byte[])[4]
 	{
 		(18589, new byte[6] { 255, 21, 205, 136, 4, 0 }),
@@ -97,15 +93,6 @@ internal static class Presenter
 	internal static extern int cp_failed();
 
 	[DllImport("CMAPresenter")]
-	internal static extern int cp_visible();
-
-	[DllImport("CMAPresenter")]
-	internal static extern int cp_tearing();
-
-	[DllImport("CMAPresenter")]
-	internal static extern ulong cp_captured();
-
-	[DllImport("CMAPresenter")]
 	internal static extern ulong cp_shown();
 
 	[DllImport("CMAPresenter")]
@@ -123,6 +110,4 @@ internal static class Presenter
 	[DllImport("CMAPresenter")]
 	internal static extern double cp_spacing_ms();
 
-	[DllImport("CMAPresenter")]
-	internal static extern void cp_close();
 }

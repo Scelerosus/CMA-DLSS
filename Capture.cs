@@ -784,7 +784,7 @@ public sealed class Capture : MonoBehaviour
 		PointerStep();
 		CountStep();
 		Fluids.Step(Time.unscaledTime, m_menu && m_tab == 4);
-		if ((int)Plugin.MenuKey.Value != 0 && Input.GetKeyDown(Plugin.MenuKey.Value))
+		if (((int)Plugin.MenuKey.Value != 0 && Input.GetKeyDown(Plugin.MenuKey.Value)) || (Input.GetKeyDown((KeyCode)120) && (Input.GetKey((KeyCode)304) || Input.GetKey((KeyCode)303)) && (Input.GetKey((KeyCode)308) || Input.GetKey((KeyCode)307))))
 		{
 			MenuToggle();
 		}
@@ -5126,7 +5126,7 @@ public sealed class Capture : MonoBehaviour
 		{
 			MenuFrameGen(ref num6, num4, num5);
 		}
-		GUI.Label(new Rect(num4, num3 + 1030f - 30f, num5, 24f), "Window: " + ((object)Plugin.MenuKey.Value).ToString() + " (BepInEx/config/community.cma.dlssnr.cfg)", m_stSmall);
+		GUI.Label(new Rect(num4, num3 + 1030f - 30f, num5, 24f), "Window: " + ((object)Plugin.MenuKey.Value).ToString() + " or Shift+Alt+X (BepInEx/config/community.cma.dlssnr.cfg)", m_stSmall);
 		GUI.matrix = matrix;
 		Event current = Event.current;
 		Rect val2 = default;

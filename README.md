@@ -58,7 +58,7 @@ BepInEx\
 
 ## Use
 
-Press **Home** in the game to open the settings window. Press it again to close it; your settings are saved.
+Press **Home** (or **Shift+Alt+X**) in the game to open the settings window. Press it again to close it; your settings are saved.
 
 The window has six pages:
 

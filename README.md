@@ -1,4 +1,4 @@
-# CMA DLSS NR 0.1.15
+# CMA DLSS NR 0.11.2
 
 NVIDIA DLSS, DLSS neural rendering and DLSS frame generation for *Corrupted Modeling Agency* (tested with 0.67).
 

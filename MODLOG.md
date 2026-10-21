@@ -377,3 +377,7 @@ Lesson: anything new on the main path gets its own try/catch and must not be abl
 ## 0.8.8 (installed in 0.66; not run in game): frame generation is x2 only again; work on the mod paused by the user
 - User: "leave x2, take the multi generator out, that is all for this mod for now". Multiplier choice, auto mode and the cap on rendered frames removed (FrameGen.cs, Latency.cs, config FrameGen/Multiplier and MatchRefreshRate). Same as 0.8.4 for frame generation.
 - State left behind: mod 0.8.8 on the borrowed DlssBridge.dll; own native library (stage 1, DLSS on D3D11, tested outside the game only) in native\, not loaded; release\CMADlssNr-0.8.2.zip is OLD and holds the changed nvngx_dlssnr.dll and the borrowed DlssBridge.dll - not to be published as it is.
+
+## 0.1.15 and after (2026-10-17)
+- Archive release\CMADlssNr-0.1.15.zip built 09:28 (libraries updated, see CHANGELOG). Commits after it, not in that archive: dead code removed and one source for the version, scalp cap depth, menu pointer taken from Input.mousePosition (clicks used to land lower than the button). Not run in game.
+- notes\DlssBridge_map.md: map of the decompiled DlssBridge.dll (subsystems, NGX parameters).

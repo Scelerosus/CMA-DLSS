@@ -784,7 +784,7 @@ public sealed class Capture : MonoBehaviour
 		PointerStep();
 		CountStep();
 		Fluids.Step(Time.unscaledTime, m_menu && m_tab == 4);
-		if ((int)Plugin.MenuKey.Value != 0 && Input.GetKeyDown(Plugin.MenuKey.Value))
+		if (((int)Plugin.MenuKey.Value != 0 && Input.GetKeyDown(Plugin.MenuKey.Value)) || (Input.GetKeyDown((KeyCode)120) && (Input.GetKey((KeyCode)304) || Input.GetKey((KeyCode)303)) && (Input.GetKey((KeyCode)308) || Input.GetKey((KeyCode)307))))
 		{
 			MenuToggle();
 		}
@@ -4845,12 +4845,20 @@ public sealed class Capture : MonoBehaviour
 		style.fontSize = fontSize;
 	}
 
+	// The pointer in menu coordinates, from the screen position: Event.mousePosition came out above the system pointer, so buttons had to be clicked lower.
+	private static Vector2 MenuMouse()
+	{
+		Vector3 mousePosition = Input.mousePosition;
+		float num = Mathf.Max(1f, (float)Screen.height / 1080f);
+		return new Vector2(mousePosition.x / num, ((float)Screen.height - mousePosition.y) / num);
+	}
+
 	private bool Clicked(Rect r)
 	{
 		//IL_0007: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0019: Unknown result type (might be due to invalid IL or missing references)
 		Event current = Event.current;
-		if ((int)current.type == 0 && current.button == 0 && r.Contains(current.mousePosition))
+		if ((int)current.type == 0 && current.button == 0 && r.Contains(MenuMouse()))
 		{
 			current.Use();
 			return true;
@@ -4948,14 +4956,14 @@ public sealed class Capture : MonoBehaviour
 		Rect val2 = default;
 		val2 = new Rect(x, y, w, 20f);
 		Event current = Event.current;
-		if ((int)current.type == 0 && current.button == 0 && val2.Contains(current.mousePosition))
+		if ((int)current.type == 0 && current.button == 0 && val2.Contains(MenuMouse()))
 		{
 			m_dragId = id;
 			current.Use();
 		}
 		if (m_dragId == id && ((int)current.type == 3 || (int)current.type == 0 || (int)current.type == 12))
 		{
-			float num = Mathf.Lerp(min, max, Mathf.Clamp01((current.mousePosition.x - x) / w));
+			float num = Mathf.Lerp(min, max, Mathf.Clamp01((MenuMouse().x - x) / w));
 			num = Mathf.Round(num * 100f) / 100f;
 			if (Mathf.Abs(num - e.Value) > 0.0001f)
 			{
@@ -5118,7 +5126,7 @@ public sealed class Capture : MonoBehaviour
 		{
 			MenuFrameGen(ref num6, num4, num5);
 		}
-		GUI.Label(new Rect(num4, num3 + 1030f - 30f, num5, 24f), "Window: " + ((object)Plugin.MenuKey.Value).ToString() + " (BepInEx/config/community.cma.dlssnr.cfg)", m_stSmall);
+		GUI.Label(new Rect(num4, num3 + 1030f - 30f, num5, 24f), "Window: " + ((object)Plugin.MenuKey.Value).ToString() + " or Shift+Alt+X (BepInEx/config/community.cma.dlssnr.cfg)", m_stSmall);
 		GUI.matrix = matrix;
 		Event current = Event.current;
 		Rect val2 = default;

@@ -18,7 +18,7 @@ public sealed class Plugin : BasePlugin
 
 	public const string PluginName = "CMA DLSS NR";
 
-	public const string PluginVersion = "0.1.15";
+	public const string PluginVersion = "0.11.2";
 
 	internal static ManualLogSource ModLog;
 

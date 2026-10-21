@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.2
+
+### Added
+- **Shift+Alt+X** also opens and closes the settings window (Home stays).
+
+### Fixed
+- **Menu clicks landed below the button.** The pointer is now taken from the screen position, not from `Event.mousePosition`, which came out above the system pointer.
+- **Scalp cap depth** (`DLSS/ScalpDepth`).
+
+### Changed
+- Dead constants, RVAs and unused imports removed; the version is read from `Plugin.PluginVersion` (attribute, logs, menu title). No compiler warnings left.
+
 ## 0.1.15
 
 ### Changed
